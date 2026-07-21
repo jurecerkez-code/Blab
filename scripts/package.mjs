@@ -16,9 +16,24 @@ const BUILDER = path.join(ROOT, 'node_modules', '.bin', process.platform === 'wi
 
 const out = await mkdtemp(path.join(tmpdir(), 'blab-build-'));
 
+// electron-builder only builds for the machine it runs on, so the host platform
+// picks the target. Adding one is a line here plus a block in package.json.
+const TARGETS = {
+  // No target after --mac: naming one on the command line discards the arch
+  // from the config, and the mac build is universal (Intel + Apple Silicon).
+  darwin: { flag: ['--mac'], artifact: /^Blab-.*\.dmg$/ },
+  win32: { flag: ['--win', 'nsis'], artifact: /^Blab-Setup-.*\.exe$/ },
+};
+
+const TARGET = TARGETS[process.platform];
+if (!TARGET) {
+  console.error(`No installer target for ${process.platform}. Supported: ${Object.keys(TARGETS).join(', ')}.`);
+  process.exit(1);
+}
+
 function run() {
   return new Promise((resolve, reject) => {
-    const args = ['--win', 'nsis', `-c.directories.output=${out}`];
+    const args = [...TARGET.flag, `-c.directories.output=${out}`];
     const child = spawn(BUILDER, args, { cwd: ROOT, stdio: 'inherit', shell: process.platform === 'win32' });
     child.on('error', reject);
     child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`electron-builder exited ${code}`))));
@@ -28,7 +43,7 @@ function run() {
 try {
   await run();
 
-  const names = (await readdir(out)).filter((n) => /^Blab-Setup-.*\.exe$/.test(n));
+  const names = (await readdir(out)).filter((n) => TARGET.artifact.test(n));
   if (names.length === 0) throw new Error('electron-builder produced no installer.');
 
   for (const name of names) {

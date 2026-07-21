@@ -1,7 +1,7 @@
 {
   "name": "blab",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Record a talk, type notes, get a transcript. All on your own machine.",
   "author": "jurecerkez-code",
   "license": "MIT",
@@ -26,7 +26,8 @@
     "files": [
       "dist/**",
       "electron/**",
-      "package.json"
+      "package.json",
+      "!node_modules/**"
     ],
     "directories": {
       "output": "release",
@@ -35,6 +36,23 @@
     "win": {
       "target": "nsis",
       "icon": "build/icon.ico"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": "universal"
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.productivity",
+      "identity": null,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Blab records audio so it can transcribe it on this machine."
+      }
+    },
+    "dmg": {
+      "artifactName": "Blab-${version}.${ext}"
     },
     "nsis": {
       "oneClick": true,
