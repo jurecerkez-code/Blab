@@ -12,7 +12,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const BUILDER = path.join(ROOT, 'node_modules', '.bin', process.platform === 'win32' ? 'electron-builder.cmd' : 'electron-builder');
+const WINDOWS = process.platform === 'win32';
+const BUILDER = path.join(ROOT, 'node_modules', '.bin', WINDOWS ? 'electron-builder.cmd' : 'electron-builder');
+
+// Windows has to go through a shell, because Node refuses to run a .cmd file
+// without one. A shell splits on spaces, and plenty of people keep their code
+// in a folder whose name has a space in it, so everything handed to it gets
+// quoted. Without this the build dies on the first space in the path.
+const quote = (s) => (WINDOWS && s.includes(' ') ? `"${s}"` : s);
 
 const out = await mkdtemp(path.join(tmpdir(), 'blab-build-'));
 
@@ -33,8 +40,8 @@ if (!TARGET) {
 
 function run() {
   return new Promise((resolve, reject) => {
-    const args = [...TARGET.flag, `-c.directories.output=${out}`];
-    const child = spawn(BUILDER, args, { cwd: ROOT, stdio: 'inherit', shell: process.platform === 'win32' });
+    const args = [...TARGET.flag, `-c.directories.output=${out}`].map(quote);
+    const child = spawn(quote(BUILDER), args, { cwd: ROOT, stdio: 'inherit', shell: WINDOWS });
     child.on('error', reject);
     child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`electron-builder exited ${code}`))));
   });

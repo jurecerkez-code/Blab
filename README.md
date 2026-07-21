@@ -6,20 +6,42 @@ transcript on your own computer.
 No account. No login. No cloud. No API key. No subscription. Nothing leaves
 your machine.
 
-Windows. Free. One feature.
+Windows and Mac. Free. One feature.
 
 ## Download
 
-Grab [Blab-Setup-0.1.0.exe](https://github.com/jurecerkez-code/Blab/releases/latest)
-and run it. That is the install.
+| Your computer | File | What to do |
+|---------------|------|------------|
+| **Windows PC** | `Blab-Setup-0.2.0.exe` | Run it. Windows shows a warning. Click **More info**, then **Run anyway** |
+| **Mac** | `Blab-0.2.0.dmg` | Open it, drag Blab into Applications. First time only: **right click** Blab, choose **Open**, then **Open** again |
 
-Windows will say "Windows protected your PC" because the installer is not
-signed. Click **More info**, then **Run anyway**. Once, and never again. A
-certificate that removes that screen costs a few hundred euros a year, and
-nothing else about Blab costs anything, so it stays unsigned.
+Both from the [releases page](https://github.com/jurecerkez-code/Blab/releases/latest).
+One file for every Mac, old or new. You do not need to know which chip is in
+your computer.
 
-The file is 236 MB because the speech model is inside it. After you install it,
-Blab downloads nothing, ever.
+### About that warning
+
+Nothing is wrong with the file. Windows and Mac both shout at any app whose
+author has not paid them a yearly fee. Apple wants 99 dollars a year, Microsoft
+wants a few hundred euros.
+
+Blab makes no money, so it pays nobody, so you get one warning screen and one
+extra click. On Mac the message even says the app is damaged. It is not. Right
+click it, choose Open, and it never asks again.
+
+If you do not want to trust that, the source is right here and you can build it
+yourself.
+
+### Why the file is so big
+
+The speech model is inside it. 153 MB on Windows, 276 MB on Mac. The Mac one is
+bigger because it holds a version for both Apple and Intel chips in one file.
+
+Once it is installed, Blab downloads nothing, ever. The first launch takes
+about 30 seconds while the model loads. Every launch after that is about three
+seconds.
+
+Linux is not built yet.
 
 ## Using it
 
@@ -95,7 +117,8 @@ Your audio, your notes and your transcripts stay in your folder.
 
 ## Building it yourself
 
-You need [Node.js](https://nodejs.org) 20 or newer.
+You need [Node.js](https://nodejs.org) 20 or newer, and you can only build for
+the system you are sitting at. Windows makes the exe, a Mac makes the dmg.
 
 ```
 git clone https://github.com/jurecerkez-code/Blab.git
@@ -105,7 +128,7 @@ npm run setup
 npm run package
 ```
 
-That writes `Blab-Setup-0.1.0.exe` into the folder.
+That writes the installer for whatever machine you ran it on into the folder.
 
 `npm run setup` is the only network moment in the whole project. It pulls the
 Whisper model from HuggingFace, with the same files copied onto a Blab release
