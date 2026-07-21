@@ -46,7 +46,7 @@
       ],
       "icon": "build/icon.png",
       "category": "public.app-category.productivity",
-      "identity": null,
+      "identity": "-",
       "extendInfo": {
         "NSMicrophoneUsageDescription": "Blab records audio so it can transcribe it on this machine."
       }

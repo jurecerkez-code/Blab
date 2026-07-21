@@ -13,7 +13,7 @@ Windows and Mac. Free. One feature.
 | Your computer | File | What to do |
 |---------------|------|------------|
 | **Windows PC** | `Blab-Setup-0.2.0.exe` | Run it. Windows shows a warning. Click **More info**, then **Run anyway** |
-| **Mac** | `Blab-0.2.0.dmg` | Open it, drag Blab into Applications. First time only: **right click** Blab, choose **Open**, then **Open** again |
+| **Mac** | `Blab-0.2.0.dmg` | Open it, drag Blab into Applications. First time only: double click Blab, click **Done**, then go to **System Settings → Privacy & Security** and click **Open Anyway** |
 
 Both from the [releases page](https://github.com/jurecerkez-code/Blab/releases/latest).
 One file for every Mac, old or new. You do not need to know which chip is in
@@ -25,9 +25,23 @@ Nothing is wrong with the file. Windows and Mac both shout at any app whose
 author has not paid them a yearly fee. Apple wants 99 dollars a year, Microsoft
 wants a few hundred euros.
 
-Blab makes no money, so it pays nobody, so you get one warning screen and one
-extra click. On Mac the message even says the app is damaged. It is not. Right
-click it, choose Open, and it never asks again.
+Blab makes no money, so it pays nobody, so you get one warning screen on the
+way in.
+
+On Mac that screen is titled **"Blab" Not Opened** and says Apple could not
+verify Blab is free of malware. The only two buttons are **Move to Trash** and
+**Done**. There is no Open button, and this is the part that catches people:
+
+1. Click **Done**. Not Move to Trash.
+2. Open **System Settings**, go to **Privacy & Security**, scroll to the
+   bottom. There is a line about Blab with an **Open Anyway** button.
+3. Click it, enter your Mac password, and confirm.
+
+It never asks again.
+
+Older guides tell you to right click the app and choose Open. That stopped
+working in macOS 15. On anything newer, System Settings is the only way
+through.
 
 If you do not want to trust that, the source is right here and you can build it
 yourself.
@@ -38,8 +52,8 @@ The speech model is inside it. 153 MB on Windows, 276 MB on Mac. The Mac one is
 bigger because it holds a version for both Apple and Intel chips in one file.
 
 Once it is installed, Blab downloads nothing, ever. The first launch takes
-about 30 seconds while the model loads. Every launch after that is about three
-seconds.
+about ten seconds while the model loads. Every launch after that is two or
+three.
 
 Linux is not built yet.
 
