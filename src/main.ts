@@ -39,6 +39,9 @@ const ui = {
 
 const recorder = new Recorder();
 const transcriber = new Transcriber();
+/** Only macOS has a pane to send anyone to, so only there is the button worth offering. */
+let canOpenMicSettings = false;
+void window.blab?.micStatus().then((s) => (canOpenMicSettings = s !== 'unsupported'));
 let root: FileSystemDirectoryHandle | null = null;
 let recordings: Recording[] = [];
 let selected: string | null = null;
@@ -266,12 +269,9 @@ function tick(): void {
 async function microphoneReady(): Promise<boolean> {
   if (!window.blab) return true;
   if (await window.blab.requestMic()) return true;
-  const status = await window.blab.micStatus().catch(() => 'unknown');
-  say(
-    `Blab needs the microphone and macOS is refusing (${status}). Turn Blab on in microphone settings, then press Record again.`,
-    true,
-    true,
-  );
+  // Reached only after the prompt has been answered no once. macOS will not
+  // show it a second time, so the pane is the only way back.
+  say('Blab needs the microphone. Switch Blab on below, then press Record again.', true, true);
   return false;
 }
 
@@ -288,7 +288,7 @@ async function startRecording(): Promise<void> {
           ? 'No microphone found. Plug one in and press Record again.'
           : `Could not start the microphone: ${(err as Error).message}`,
       true,
-      name === 'NotAllowedError',
+      name === 'NotAllowedError' && canOpenMicSettings,
     );
     return;
   }
