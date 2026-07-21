@@ -17,7 +17,7 @@
     "app": "npm run build && electron .",
     "app:dev": "electron . --dev",
     "app:check": "electron . --diagnose",
-    "package": "npm run build && npm run icon && electron-builder --win nsis && node scripts/place-installer.mjs"
+    "package": "npm run build && npm run icon && node scripts/package.mjs"
   },
   "build": {
     "appId": "app.blab.local",

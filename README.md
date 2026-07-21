@@ -178,7 +178,7 @@ src/
 scripts/
   setup.mjs       the one network moment
   icon.mjs        renders the app icon
-  place-installer.mjs  moves the built installer somewhere you can find it
+  package.mjs     builds the installer and puts it where you can find it
 ```
 
 Browser storage holds exactly one thing: the handle for your folder. Folder
