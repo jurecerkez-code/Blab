@@ -1,0 +1,53 @@
+{
+  "name": "blab",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "icon": "node scripts/icon.mjs",
+    "app": "npm run build && electron .",
+    "app:dev": "electron . --dev",
+    "app:check": "electron . --diagnose",
+    "package": "npm run build && npm run icon && electron-builder --win nsis && node scripts/place-installer.mjs"
+  },
+  "build": {
+    "appId": "app.blab.local",
+    "productName": "Blab",
+    "asar": false,
+    "files": [
+      "dist/**",
+      "electron/**",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Blab",
+      "artifactName": "Blab-Setup-${version}.${ext}"
+    }
+  },
+  "dependencies": {
+    "@huggingface/transformers": "3.7.6"
+  },
+  "devDependencies": {
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.3",
+    "typescript": "5.9.3",
+    "vite": "^7.3.6"
+  }
+}

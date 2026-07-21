@@ -1,0 +1,14 @@
+node_modules
+dist
+
+# Packaged desktop builds. Rebuild them with `npm run package`.
+release
+Blab-Setup-*.exe
+
+# Anyone's recordings, if they point Blab at a folder inside the checkout.
+# Audio and notes are the user's, and never the repository's.
+recordings
+
+# Fetched once by `npm run setup`. Not source, and too big for git.
+public/models
+public/ort

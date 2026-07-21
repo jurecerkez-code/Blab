@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Blab</title>
+  </head>
+  <body>
+    <main id="app">
+      <header class="bar">
+        <h1>Blab</h1>
+        <div class="bar-right">
+          <span id="folder-name" class="muted"></span>
+          <button id="pick-folder" class="ghost">Pick folder</button>
+        </div>
+      </header>
+
+      <section id="setup" class="card hidden">
+        <p>Blab keeps everything as plain files in a folder you pick. Nothing leaves this machine.</p>
+        <button id="setup-pick" class="primary">Pick a folder</button>
+      </section>
+
+      <section id="recorder" class="card hidden">
+        <input id="title" type="text" placeholder="What is this talk?" autocomplete="off" />
+        <div class="row">
+          <button id="record" class="record">Record</button>
+          <span id="timer" class="timer">00:00</span>
+        </div>
+        <textarea id="notes" placeholder="Your notes. Type while it records."></textarea>
+      </section>
+
+      <!-- Outside #recorder so setup errors are visible before a folder is picked. -->
+      <p id="status" class="status"></p>
+
+      <section id="library" class="hidden">
+        <h2>Recordings</h2>
+        <ul id="list"></ul>
+        <p id="empty" class="muted">
+          Nothing yet. Type a title above and press Record — Blab makes a folder
+          for each recording itself, so you do not create any by hand.
+        </p>
+      </section>
+
+      <section id="detail" class="card hidden"></section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
