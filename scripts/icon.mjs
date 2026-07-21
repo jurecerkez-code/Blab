@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'build', 'icon.ico');
+const OUT_PNG = path.join(ROOT, 'build', 'icon.png');
 
 const SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
   <rect width="256" height="256" rx="56" fill="#14140f"/>
@@ -41,6 +42,11 @@ async function main() {
   await mkdir(path.dirname(OUT), { recursive: true });
   await writeFile(OUT, Buffer.concat([header, png]));
   console.log(`Wrote ${path.relative(ROOT, OUT)} (${png.length} bytes of PNG).`);
+
+  // electron-builder derives the .icns from a square PNG of at least 512px.
+  const large = await sharp(Buffer.from(SVG)).resize(1024, 1024).png().toBuffer();
+  await writeFile(OUT_PNG, large);
+  console.log(`Wrote ${path.relative(ROOT, OUT_PNG)} (${large.length} bytes).`);
 }
 
 await main();
