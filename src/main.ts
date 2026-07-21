@@ -30,6 +30,7 @@ const ui = {
   timer: $('timer'),
   notes: $<HTMLTextAreaElement>('notes'),
   status: $('status'),
+  micSettings: $<HTMLButtonElement>('mic-settings'),
   library: $('library'),
   list: $<HTMLUListElement>('list'),
   empty: $('empty'),
@@ -46,9 +47,10 @@ let ticker: number | undefined;
 /** Object URL for the audio player in the detail panel. Revoked on switch. */
 let audioUrl: string | null = null;
 
-function say(message: string, isError = false): void {
+function say(message: string, isError = false, offerMicSettings = false): void {
   ui.status.textContent = message;
   ui.status.classList.toggle('error', isError);
+  ui.micSettings.classList.toggle('hidden', !offerMicSettings);
 }
 
 // ---------------------------------------------------------------- folder
@@ -256,18 +258,37 @@ function tick(): void {
   ui.timer.textContent = formatDuration(Date.now() - startedAt);
 }
 
+/**
+ * macOS hands back a stream of silence when it has never been asked, so asking
+ * has to happen before the recorder opens rather than in reply to an error that
+ * never arrives. Returns false when there is no point going on.
+ */
+async function microphoneReady(): Promise<boolean> {
+  if (!window.blab) return true;
+  if (await window.blab.requestMic()) return true;
+  const status = await window.blab.micStatus().catch(() => 'unknown');
+  say(
+    `Blab needs the microphone and macOS is refusing (${status}). Turn Blab on in microphone settings, then press Record again.`,
+    true,
+    true,
+  );
+  return false;
+}
+
 async function startRecording(): Promise<void> {
+  if (!(await microphoneReady())) return;
   try {
     await recorder.start();
   } catch (err) {
     const name = (err as DOMException)?.name;
     say(
       name === 'NotAllowedError'
-        ? 'Blab needs the microphone. Allow it in the address bar, then press Record again.'
+        ? 'Blab needs the microphone. Turn it on for Blab, then press Record again.'
         : name === 'NotFoundError'
           ? 'No microphone found. Plug one in and press Record again.'
           : `Could not start the microphone: ${(err as Error).message}`,
       true,
+      name === 'NotAllowedError',
     );
     return;
   }
@@ -370,6 +391,10 @@ async function setupPickClicked(): Promise<void> {
   if (saved && (await connect(saved, true))) return;
   await choose();
 }
+
+ui.micSettings.addEventListener('click', () => {
+  void window.blab?.openMicSettings();
+});
 
 ui.record.addEventListener('click', () => {
   void (recorder.active ? stopRecording() : startRecording());
