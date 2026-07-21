@@ -1,7 +1,7 @@
 {
   "name": "blab",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Record a talk, type notes, get a transcript. All on your own machine.",
   "author": "jurecerkez-code",
   "license": "MIT",
@@ -46,7 +46,9 @@
       ],
       "icon": "build/icon.png",
       "category": "public.app-category.productivity",
-      "identity": null,
+      "identity": "-",
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
       "extendInfo": {
         "NSMicrophoneUsageDescription": "Blab records audio so it can transcribe it on this machine."
       }

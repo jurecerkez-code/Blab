@@ -10,10 +10,19 @@ interface FileSystemDirectoryHandle {
   values(): AsyncIterableIterator<FileSystemHandle>;
 }
 
+type MicStatus = 'granted' | 'denied' | 'restricted' | 'not-determined' | 'unsupported';
+
 interface Window {
   showDirectoryPicker(options?: {
     id?: string;
     mode?: 'read' | 'readwrite';
     startIn?: string | FileSystemHandle;
   }): Promise<FileSystemDirectoryHandle>;
+
+  /** Present only in the desktop app. The browser build has no microphone gate to open. */
+  blab?: {
+    micStatus(): Promise<MicStatus>;
+    requestMic(): Promise<boolean>;
+    openMicSettings(): Promise<void>;
+  };
 }

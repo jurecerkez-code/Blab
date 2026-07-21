@@ -1,7 +1,7 @@
 // Blab as a desktop app. This file is the whole shell: it opens one window,
 // serves the built app to it, and says yes to the microphone. The app inside
 // is byte-for-byte the same one `npm run dev` serves.
-const { app, BrowserWindow, protocol, net, session, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, protocol, net, session, shell, systemPreferences } = require('electron');
 const path = require('node:path');
 const { readdir, stat } = require('node:fs/promises');
 const { pathToFileURL } = require('node:url');
@@ -89,6 +89,35 @@ function serveDist() {
 // short list only.
 const ALLOWED = new Set(['media', 'audioCapture', 'fileSystem', 'clipboard-sanitized-write', 'clipboard-read']);
 
+// Saying yes above only answers Chromium. macOS keeps its own record, and if it
+// has never been asked it hands back a stream of silence rather than an error —
+// so the recording succeeds, the file is the right shape, and every word in it
+// is gone. Nothing throws, so the renderer has nothing to report. Ask the
+// system directly and let the caller say something useful when the answer is no.
+const MIC_SETTINGS = 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone';
+
+function micStatus() {
+  if (process.platform !== 'darwin') return 'unsupported';
+  return systemPreferences.getMediaAccessStatus('microphone');
+}
+
+async function askMacForMicrophone() {
+  if (process.platform !== 'darwin') return true;
+  if (micStatus() === 'granted') return true;
+  // Ask whatever the status says. Asking when the answer really is no just
+  // returns false and shows nothing, so there is no cost to trying — and the
+  // status alone has proved not to be worth trusting as a reason to skip it.
+  return systemPreferences.askForMediaAccess('microphone');
+}
+
+function serveMicrophoneRequests() {
+  ipcMain.handle('mic:status', () => micStatus());
+  ipcMain.handle('mic:request', () => askMacForMicrophone());
+  ipcMain.handle('mic:settings', () => {
+    if (process.platform === 'darwin') void shell.openExternal(MIC_SETTINGS);
+  });
+}
+
 function allowLocalPermissions() {
   const ses = session.defaultSession;
   ses.setPermissionRequestHandler((_wc, permission, done) => done(ALLOWED.has(permission)));
@@ -120,7 +149,12 @@ function createWindow() {
     backgroundColor: '#14140f',
     autoHideMenuBar: true,
     show: false,
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      preload: path.join(__dirname, 'preload.cjs'),
+    },
   });
 
   win.once('ready-to-show', () => win.show());
@@ -223,8 +257,13 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     allowLocalPermissions();
+    serveMicrophoneRequests();
     if (!DEV) serveDist();
     createWindow();
+    // The microphone is not asked for here. A prompt that arrives before the
+    // person has done anything is easy to wave away, and macOS remembers a
+    // dismissal as a no and then never asks again. Record asks instead, when
+    // the intent is obvious and the prompt makes sense.
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
