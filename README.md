@@ -12,8 +12,8 @@ Windows and Mac. Free. One feature.
 
 | Your computer | File | What to do |
 |---------------|------|------------|
-| **Windows PC** | `Blab-Setup-0.2.0.exe` | Run it. Windows shows a warning. Click **More info**, then **Run anyway** |
-| **Mac** | `Blab-0.2.0.dmg` | Open it, drag Blab into Applications. First time only: double click Blab, click **Done**, then go to **System Settings → Privacy & Security** and click **Open Anyway** |
+| **Windows PC** | `Blab-Setup-0.2.1.exe` | Run it. Windows shows a warning. Click **More info**, then **Run anyway** |
+| **Mac** | `Blab-0.2.1.dmg` | Open it, drag Blab into Applications. First time only: double click Blab, click **Done**, then go to **System Settings → Privacy & Security** and click **Open Anyway** |
 
 Both from the [releases page](https://github.com/jurecerkez-code/Blab/releases/latest).
 One file for every Mac, old or new. You do not need to know which chip is in
@@ -168,6 +168,17 @@ end to end: ok: loaded and transcribed 2s in 6s
 ```
 
 Run that before you ship anything.
+
+One warning about the microphone line. Started from a terminal, Blab inherits
+whatever microphone permission that terminal already has, so the line reads
+`ok` on a build that cannot record a thing once it is launched normally. A
+0.2.0 shipped that way: every recording on a Mac was silence, the file was the
+right size and shape, and Whisper wrote `you`, which is what it writes for an
+empty room. `app:check` said `ok` throughout.
+
+It is still worth running for the other three. To trust the microphone, open
+the app from Finder or the Start menu, record yourself saying something you can
+check, and read the transcript back.
 
 The browser version needs the File System Access API to write to your folder,
 which Firefox and Safari do not have. It also cannot get the microphone inside
