@@ -122,6 +122,26 @@ button.record.is-recording {
 
 .timer.live { color: var(--red); }
 
+.meter {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 26px;
+  margin-top: -6px;
+}
+
+.meter .bar {
+  flex: 1;
+  min-width: 3px;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--line);
+  transform: scaleY(0.06);
+  transform-origin: bottom;
+}
+
+.meter.live .bar { background: var(--accent); }
+
 input[type='text'], textarea {
   font: inherit;
   width: 100%;
