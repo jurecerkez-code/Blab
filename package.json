@@ -5,7 +5,10 @@
   "description": "Record a talk, type notes, get a transcript. All on your own machine.",
   "author": "jurecerkez-code",
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/jurecerkez-code/Blab.git" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jurecerkez-code/Blab.git"
+  },
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -13,6 +16,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "test": "playwright test",
     "icon": "node scripts/icon.mjs",
     "app": "npm run build && electron .",
     "app:dev": "electron . --dev",
@@ -69,6 +73,7 @@
     "@huggingface/transformers": "3.7.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "electron": "^43.1.1",
     "electron-builder": "^26.15.3",
     "typescript": "5.9.3",
