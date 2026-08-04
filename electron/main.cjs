@@ -94,7 +94,16 @@ const ALLOWED = new Set(['media', 'audioCapture', 'fileSystem', 'clipboard-sanit
 // so the recording succeeds, the file is the right shape, and every word in it
 // is gone. Nothing throws, so the renderer has nothing to report. Ask the
 // system directly and let the caller say something useful when the answer is no.
-const MIC_SETTINGS = 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone';
+// macOS 13 replaced System Preferences with System Settings and renamed the
+// panes with it. The old identifier lands in the wrong place on Ventura and
+// later, which matters more than it sounds: once someone has answered no,
+// macOS will not ask again, so this button is the only way back.
+function micSettingsUrl() {
+  const major = Number(process.getSystemVersion().split('.')[0]);
+  return major >= 13
+    ? 'x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Microphone'
+    : 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone';
+}
 
 function micStatus() {
   if (process.platform !== 'darwin') return 'unsupported';
@@ -114,7 +123,7 @@ function serveMicrophoneRequests() {
   ipcMain.handle('mic:status', () => micStatus());
   ipcMain.handle('mic:request', () => askMacForMicrophone());
   ipcMain.handle('mic:settings', () => {
-    if (process.platform === 'darwin') void shell.openExternal(MIC_SETTINGS);
+    if (process.platform === 'darwin') void shell.openExternal(micSettingsUrl());
   });
 }
 
@@ -269,5 +278,10 @@ if (!app.requestSingleInstanceLock()) {
     });
   });
 
-  app.on('window-all-closed', () => app.quit());
+  // Everywhere but macOS, closing the last window means you are done. macOS
+  // keeps an app in the dock instead, and reopens a window on activate — which
+  // is what the handler above is for. Quitting here would make it dead code.
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit();
+  });
 }
