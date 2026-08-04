@@ -1,5 +1,6 @@
 import './style.css';
 import { decodeForWhisper } from './audio';
+import { Meter } from './meter';
 import { Recorder, formatDuration } from './recorder';
 import { recallRoot, rememberRoot } from './store';
 import { ModelMissingError, Transcriber } from './transcriber';
@@ -28,6 +29,7 @@ const ui = {
   title: $<HTMLInputElement>('title'),
   record: $<HTMLButtonElement>('record'),
   timer: $('timer'),
+  meter: $('meter'),
   notes: $<HTMLTextAreaElement>('notes'),
   status: $('status'),
   micSettings: $<HTMLButtonElement>('mic-settings'),
@@ -38,6 +40,7 @@ const ui = {
 };
 
 const recorder = new Recorder();
+const meter = new Meter(ui.meter);
 const transcriber = new Transcriber();
 /** Only macOS has a pane to send anyone to, so only there is the button worth offering. */
 let canOpenMicSettings = false;
@@ -292,6 +295,9 @@ async function startRecording(): Promise<void> {
     );
     return;
   }
+  const stream = recorder.mediaStream;
+  if (stream) await meter.start(stream);
+
   startedAt = Date.now();
   tick();
   ticker = window.setInterval(tick, 250);
@@ -304,6 +310,9 @@ async function startRecording(): Promise<void> {
 
 async function stopRecording(): Promise<void> {
   window.clearInterval(ticker);
+  // Before recorder.stop(), so the meter lets go of the stream while it is
+  // still alive rather than reading a track that is already ending.
+  meter.stop();
   ui.timer.classList.remove('live');
   ui.record.disabled = true;
   ui.record.textContent = 'Record';
