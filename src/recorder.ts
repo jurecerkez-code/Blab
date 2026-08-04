@@ -14,6 +14,11 @@ export class Recorder {
     return this.recorder !== null;
   }
 
+  /** The live stream, so a meter can watch it without opening the mic again. */
+  get mediaStream(): MediaStream | null {
+    return this.stream;
+  }
+
   /** Throws if the browser or the user refuses the mic. */
   async start(): Promise<void> {
     this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });

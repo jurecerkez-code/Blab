@@ -122,25 +122,25 @@ button.record.is-recording {
 
 .timer.live { color: var(--red); }
 
-/* Only the box is styled. The dropdown itself is left native, so it keeps
-   looking and behaving like the rest of the OS on both Windows and macOS. */
-.lang {
-  font: inherit;
-  font-size: 14px;
-  color: var(--text);
-  background: transparent;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 6px 8px;
-  cursor: pointer;
-  flex: none;
+.meter {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 26px;
+  margin-top: -6px;
 }
 
-.lang:hover { border-color: var(--muted); }
-.lang:focus { outline: none; border-color: var(--accent); }
-/* Windows draws the closed box with the page colours but the open list with
-   the system ones, which comes out white-on-white without this. */
-.lang option { background: var(--panel); color: var(--text); }
+.meter .bar {
+  flex: 1;
+  min-width: 3px;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--line);
+  transform: scaleY(0.06);
+  transform-origin: bottom;
+}
+
+.meter.live .bar { background: var(--accent); }
 
 input[type='text'], textarea {
   font: inherit;
