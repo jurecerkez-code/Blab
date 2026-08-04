@@ -100,18 +100,22 @@ That is the price of not keeping a separate index.
 
 ## What language it writes in
 
-There is a picker in the top corner: **Auto**, **English**, **Croatian**.
+There is a picker in the top corner: **English** or **Croatian**.
 
 Blab transcribes. It never translates. Speak Croatian with Croatian selected
 and you get Croatian words back, not an English paraphrase of them. The model
 that ships with Blab is multilingual, so this costs no extra download.
 
-The label says **Auto (English)** rather than just Auto, and that honesty is
-deliberate. Whisper can detect the spoken language, but the library Blab uses
-has not implemented detection yet — it quietly assumes English. Auto therefore
-means English today. Pick your language by name and it is obeyed exactly.
+There is no Auto, on purpose. Whisper can detect the spoken language, but the
+library Blab uses has not implemented detection yet — it quietly assumes
+English. An Auto option would therefore be a lie: pick it, speak Croatian, get
+English. Better to have two honest choices than three where one misleads.
 
 Your choice is remembered, the same way your folder is. Set it once.
+
+Accuracy in Croatian is noticeably below English. The model that ships is the
+`base` tier, and Croatian is far less represented in its training, so it can
+break words in odd places. See below for swapping in a larger model.
 
 Only English and Croatian are listed because those are the two that have been
 used in anger. The model knows 99 languages; adding one is a single line in
@@ -133,6 +137,12 @@ while the last one is still going.
 Want it faster? Change one line. `MODEL` at the top of `src/worker.ts`, set it
 to `Xenova/whisper-tiny`, run `npm run setup` again. Tiny is about 3x faster
 and noticeably worse.
+
+Want it more accurate? Same line, `Xenova/whisper-small`. It is the better
+trade if you record in anything other than English — Whisper's smaller tiers
+learned far less of every other language, and Croatian in particular comes back
+with words broken in odd places. Small is several times bigger and slower, and
+the installer grows with it, so it is a real trade rather than free.
 
 ## Does it phone home
 
