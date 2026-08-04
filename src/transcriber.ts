@@ -1,4 +1,6 @@
-import type { FromWorker, ToWorker } from './worker';
+import type { FromWorker, Language, ToWorker } from './worker';
+
+export type { Language };
 
 export type Progress =
   | { stage: 'loading' }
@@ -26,13 +28,21 @@ export class Transcriber {
    * copied, so the array is detached and unusable once this is called. An hour
    * of audio is ~230 MB, which is worth not duplicating.
    */
-  transcribe(audio: Float32Array, onProgress: (p: Progress) => void): Promise<string> {
-    const run = this.queue.then(() => this.send(audio, onProgress));
+  transcribe(
+    audio: Float32Array,
+    language: Language,
+    onProgress: (p: Progress) => void,
+  ): Promise<string> {
+    const run = this.queue.then(() => this.send(audio, language, onProgress));
     this.queue = run.catch(() => {});
     return run;
   }
 
-  private send(audio: Float32Array, onProgress: (p: Progress) => void): Promise<string> {
+  private send(
+    audio: Float32Array,
+    language: Language,
+    onProgress: (p: Progress) => void,
+  ): Promise<string> {
     const id = String(++this.jobs);
     const worker = this.spawn();
 
@@ -61,6 +71,7 @@ export class Transcriber {
         type: 'transcribe',
         id,
         audio,
+        language,
         modelPath: abs('models/'),
         ortPath: abs('ort/'),
       };
