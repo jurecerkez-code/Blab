@@ -12,8 +12,8 @@ Windows and Mac. Free. One feature.
 
 | Your computer | File | What to do |
 |---------------|------|------------|
-| **Windows PC** | `Blab-Setup-0.2.1.exe` | Run it. Windows shows a warning. Click **More info**, then **Run anyway** |
-| **Mac** | `Blab-0.2.1.dmg` | Open it, drag Blab into Applications. First time only: double click Blab, click **Done**, then go to **System Settings → Privacy & Security** and click **Open Anyway** |
+| **Windows PC** | `Blab-Setup-*.exe` | Run it. Windows shows a warning. Click **More info**, then **Run anyway** |
+| **Mac** | `Blab-*.dmg` | Open it, drag Blab into Applications. First time only: double click Blab, click **Done**, then go to **System Settings → Privacy & Security** and click **Open Anyway** |
 
 Both from the [releases page](https://github.com/jurecerkez-code/Blab/releases/latest).
 One file for every Mac, old or new. You do not need to know which chip is in
@@ -66,6 +66,12 @@ Type a title. Press **Record**. Type your notes while it listens. Press
 
 That is the whole thing.
 
+While it records, a row of bars under the button moves with your voice. That
+row exists for one reason: a microphone that is muted, unplugged, or pointed at
+the wrong device looks exactly like a working one until you press Stop and read
+an empty transcript. If the bars are flat while you are talking, Blab cannot
+hear you. Fix it now rather than after the talk.
+
 Do not make folders inside it yourself. Blab names them, and a folder it did
 not name is invisible to it.
 
@@ -91,6 +97,25 @@ folder. Blab does not need to be running. Blab does not need to exist.
 The folder name is `date_time_title`, so titles come back as slugs. "API
 Workshop" shows up as "Api workshop" in the list. The files are what matter.
 That is the price of not keeping a separate index.
+
+## What language it writes in
+
+There is a picker in the top corner: **Auto**, **English**, **Croatian**.
+
+Blab transcribes. It never translates. Speak Croatian with Croatian selected
+and you get Croatian words back, not an English paraphrase of them. The model
+that ships with Blab is multilingual, so this costs no extra download.
+
+The label says **Auto (English)** rather than just Auto, and that honesty is
+deliberate. Whisper can detect the spoken language, but the library Blab uses
+has not implemented detection yet — it quietly assumes English. Auto therefore
+means English today. Pick your language by name and it is obeyed exactly.
+
+Your choice is remembered, the same way your folder is. Set it once.
+
+Only English and Croatian are listed because those are the two that have been
+used in anger. The model knows 99 languages; adding one is a single line in
+`index.html`.
 
 ## How long can a talk be
 
@@ -153,8 +178,15 @@ Other commands:
 ```
 npm run app        build and open the app, no installer
 npm run app:check  prove the microphone, model and threads work
+npm run test       run the feature files against a real browser
 npm run dev        same app in a browser tab, Chrome or Edge only
 ```
+
+`npm test` needs its browser once, with `npx playwright install chromium`. It
+drives Chrome with a fake microphone, so it can check that the bars actually
+move rather than only that they exist. Animation is the part that cannot be
+tested by reading the page: a window that is never drawn never runs an
+animation frame, so those tests need a real browser to mean anything.
 
 `app:check` is the useful one. It opens the app, asks for the microphone, and
 pushes two seconds of silence through the real Whisper worker. Four lines, and
@@ -210,19 +242,30 @@ src/
   main.ts         the one screen and all its wiring
   vault.ts        reading and writing the folder
   recorder.ts     MediaRecorder
+  meter.ts        the live bars, reading the recorder's own microphone stream
   audio.ts        webm into mono 16 kHz samples, what Whisper wants
   transcriber.ts  talks to the worker, queues jobs
   worker.ts       Whisper itself, off the main thread
-  store.ts        remembers which folder you picked
+  store.ts        remembers your folder and your language
 scripts/
   setup.mjs       the one network moment
   icon.mjs        renders the app icon
   package.mjs     builds the installer and puts it where you can find it
+features/
+  *.feature       what each feature is supposed to do, in plain English
+tests/
+  *.spec.ts       the same scenarios, executed
 ```
 
-Browser storage holds exactly one thing. The handle for your folder. Folder
-handles cannot go into localStorage, and it is the only way to remember your
-choice between runs. Nothing about your recordings is kept in the app.
+The meter watches the stream the recorder already opened rather than asking for
+the microphone a second time. A second request would prompt macOS all over
+again and hold a second device open for nothing.
+
+Browser storage holds exactly two things: the handle for your folder, and which
+transcription language you picked. Folder handles cannot go into localStorage,
+which is why there is a database at all; the language rides along in the same
+place rather than inventing a second way to remember things. Nothing about your
+recordings is kept in the app.
 
 ## Contributing
 
