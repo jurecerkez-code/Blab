@@ -12,6 +12,7 @@ import {
   createRecordingDir,
   ensureAccess,
   listRecordings,
+  looksLikeGitCheckout,
   pickRoot,
   readFile,
   readText,
@@ -73,10 +74,17 @@ async function connect(handle: FileSystemDirectoryHandle, prompt: boolean): Prom
   ui.library.classList.remove('hidden');
   closeDetail();
   await refreshList();
+  // Said on every connect, not just the first, because the folder is
+  // remembered across restarts — the one time it matters is the day someone
+  // commits, which is rarely the day they picked the folder.
+  const inCheckout = await looksLikeGitCheckout(handle);
   say(
-    recordings.length
-      ? `Using ${handle.name}. Type a title and press Record.`
-      : `Using ${handle.name}. Type a title and press Record — Blab makes the folder for you.`,
+    inCheckout
+      ? `Using ${handle.name}, which is a git repository. Recordings are saved inside it — check .gitignore before you commit.`
+      : recordings.length
+        ? `Using ${handle.name}. Type a title and press Record.`
+        : `Using ${handle.name}. Type a title and press Record — Blab makes the folder for you.`,
+    inCheckout,
   );
   return true;
 }

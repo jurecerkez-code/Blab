@@ -56,6 +56,30 @@ export async function pickRoot(): Promise<FileSystemDirectoryHandle> {
   return window.showDirectoryPicker({ id: 'blab', mode: 'readwrite', startIn: 'documents' });
 }
 
+/**
+ * True when the folder is the root of a git checkout. Worth saying out loud:
+ * Blab writes each recording as a folder directly inside the one that was
+ * picked, so a checkout leaves someone's audio and notes sitting in a working
+ * tree, one `git add -A` from being published. Nothing here refuses the choice
+ * — it may well be deliberate — it only makes it visible.
+ */
+export async function looksLikeGitCheckout(root: FileSystemDirectoryHandle): Promise<boolean> {
+  try {
+    await root.getDirectoryHandle('.git');
+    return true;
+  } catch {
+    // Either no .git at all, or the kind below.
+  }
+  try {
+    // In a worktree or a submodule `.git` is a file pointing elsewhere rather
+    // than a directory, so the check above alone would miss it.
+    await root.getFileHandle('.git');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** True when we may read and write. Prompts the user if the grant has lapsed. */
 export async function ensureAccess(root: FileSystemDirectoryHandle, prompt: boolean): Promise<boolean> {
   const opts = { mode: 'readwrite' as const };
