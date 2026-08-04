@@ -13,10 +13,14 @@ const CHUNK_S = 30;
 const STRIDE_S = 5;
 const SAMPLE_RATE = 16000;
 
+/** 'auto', or a Whisper language code such as 'en' or 'hr'. */
+export type Language = 'auto' | 'en' | 'hr';
+
 export type ToWorker = {
   type: 'transcribe';
   id: string;
   audio: Float32Array;
+  language: Language;
   modelPath: string;
   ortPath: string;
 };
@@ -103,7 +107,7 @@ class ChunkCounter extends BaseStreamer {
 
 self.addEventListener('message', async (event: MessageEvent<ToWorker>) => {
   if (event.data.type !== 'transcribe') return;
-  const { id, audio, modelPath, ortPath } = event.data;
+  const { id, audio, language, modelPath, ortPath } = event.data;
   let ready = false;
 
   try {
@@ -124,6 +128,15 @@ self.addEventListener('message', async (event: MessageEvent<ToWorker>) => {
       chunk_length_s: CHUNK_S,
       stride_length_s: STRIDE_S,
       return_timestamps: false,
+      // Whisper can transcribe or translate, and left to itself it sometimes
+      // picks translate. Blab always wants the words that were actually said,
+      // in the language they were said in, so this is pinned.
+      task: 'transcribe',
+      // 'auto' means "no opinion". transformers.js has no language detection
+      // yet — it warns and falls back to English — so 'auto' keeps exactly the
+      // behaviour Blab had before the picker existed rather than pretending to
+      // detect anything. Naming a language forces it, which is the whole point.
+      language: language === 'auto' ? undefined : language,
       // Typed as TextStreamer upstream, but generate() only ever calls
       // put()/end() — the BaseStreamer contract this implements.
       streamer: new ChunkCounter(id, total) as unknown as TextStreamer,

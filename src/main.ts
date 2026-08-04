@@ -1,8 +1,8 @@
 import './style.css';
 import { decodeForWhisper } from './audio';
 import { Recorder, formatDuration } from './recorder';
-import { recallRoot, rememberRoot } from './store';
-import { ModelMissingError, Transcriber } from './transcriber';
+import { recallLanguage, recallRoot, rememberLanguage, rememberRoot } from './store';
+import { ModelMissingError, Transcriber, type Language } from './transcriber';
 import {
   AUDIO,
   NOTES,
@@ -24,6 +24,7 @@ const ui = {
   setupPick: $<HTMLButtonElement>('setup-pick'),
   pickFolder: $<HTMLButtonElement>('pick-folder'),
   folderName: $('folder-name'),
+  language: $<HTMLSelectElement>('language'),
   recorder: $('recorder'),
   title: $<HTMLInputElement>('title'),
   record: $<HTMLButtonElement>('record'),
@@ -344,7 +345,9 @@ async function transcribeInto(dir: FileSystemDirectoryHandle, name: string): Pro
     say('Reading the audio…');
     const samples = await decodeForWhisper(audio);
 
-    const text = await transcriber.transcribe(samples, (p) => {
+    // Read at the moment of transcribing, not when the recording started, so
+    // switching the picker and pressing Transcribe again does what it looks like.
+    const text = await transcriber.transcribe(samples, ui.language.value as Language, (p) => {
       if (p.stage === 'loading') return say('Starting Whisper on this machine…');
       say(
         p.total > 1
@@ -399,10 +402,20 @@ ui.micSettings.addEventListener('click', () => {
 ui.record.addEventListener('click', () => {
   void (recorder.active ? stopRecording() : startRecording());
 });
+ui.language.addEventListener('change', () => void rememberLanguage(ui.language.value));
 ui.pickFolder.addEventListener('click', () => void choose());
 ui.setupPick.addEventListener('click', () => void setupPickClicked());
 
 async function boot(): Promise<void> {
+  // First, and before any of the early returns below: the picker must show the
+  // remembered language whichever way the rest of boot goes.
+  const language = await recallLanguage();
+  // Guarded against a value from an older or newer build that no longer has a
+  // matching option, which would otherwise leave the select showing blank.
+  if (language && [...ui.language.options].some((o) => o.value === language)) {
+    ui.language.value = language;
+  }
+
   if (!('showDirectoryPicker' in window)) {
     ui.setup.classList.remove('hidden');
     ui.setupPick.disabled = true;
