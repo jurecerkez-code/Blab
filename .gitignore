@@ -26,3 +26,7 @@ playwright-report
 # Per-machine tool settings. Local absolute paths, and one person's choices
 # about what a tool may run — nothing another clone should inherit.
 .claude/settings.local.json
+
+# graphify's knowledge graph. Regenerated from the source it describes, so it
+# is derived output, and it goes stale the moment anyone commits without it.
+graphify-out
