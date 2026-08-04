@@ -427,8 +427,9 @@ async function boot(): Promise<void> {
   // First, and before any of the early returns below: the picker must show the
   // remembered language whichever way the rest of boot goes.
   const language = await recallLanguage();
-  // Guarded against a value from an older or newer build that no longer has a
-  // matching option, which would otherwise leave the select showing blank.
+  // Anyone upgrading from 0.3.0 has 'auto' saved, and that option is gone. It
+  // matches nothing here, so the picker keeps its default of English — which is
+  // exactly what 'auto' did anyway. Without this check it would show blank.
   if (language && [...ui.language.options].some((o) => o.value === language)) {
     ui.language.value = language;
   }
