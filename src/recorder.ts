@@ -14,6 +14,10 @@ export class Recorder {
     return this.recorder !== null;
   }
 
+  get paused(): boolean {
+    return this.recorder?.state === 'paused';
+  }
+
   /** The live stream, so a meter can watch it without opening the mic again. */
   get mediaStream(): MediaStream | null {
     return this.stream;
@@ -29,6 +33,22 @@ export class Recorder {
       if (e.data.size > 0) this.chunks.push(e.data);
     };
     this.recorder.start();
+  }
+
+  /**
+   * Stops writing without ending the recording. The microphone stays open and
+   * the file stays one file — resume() carries on into the same one, so a
+   * lecture with a break in the middle does not become two recordings.
+   *
+   * The pause itself is not stored: nothing is written while paused, so a ten
+   * minute break costs no disk and no transcription time.
+   */
+  pause(): void {
+    if (this.recorder?.state === 'recording') this.recorder.pause();
+  }
+
+  resume(): void {
+    if (this.recorder?.state === 'paused') this.recorder.resume();
   }
 
   async stop(): Promise<Blob> {
