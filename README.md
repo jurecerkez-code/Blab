@@ -126,9 +126,18 @@ used in anger. The model knows 99 languages; adding one is a single line in
 There is no limit. Whisper reads the audio in 30 second chunks, so three hours
 works the same way three minutes does. It takes longer, that is all.
 
-Memory is the real ceiling. An hour of audio is around 230 MB while it works.
-A couple of hours in one recording is comfortable. Half a day is asking for
-trouble.
+That was not true before 0.3.2, and it is worth saying why, because the failure
+was silent and looked like a broken file. Recordings are Opus, which always
+decodes at 48 kHz before being resampled down to the 16 kHz Whisper wants. The
+browser did that in one piece, so a hundred minutes needed 1.16 GB in a single
+allocation, and past roughly ninety minutes it refused — reporting `Unable to
+decode audio data`, the same message a corrupt file gives. Long recordings now
+decode packet by packet instead, so only ten minutes of audio is ever held at
+48 kHz at once.
+
+Memory is still the real ceiling, just a much higher one. An hour of audio is
+around 230 MB while it works. A couple of hours in one recording is
+comfortable. Half a day is asking for trouble.
 
 Speed is about 3.5x faster than real time. A 45 minute talk takes roughly 13
 minutes. It runs in the background, so you can start recording the next talk
