@@ -30,6 +30,7 @@ const ui = {
   recorder: $('recorder'),
   title: $<HTMLInputElement>('title'),
   record: $<HTMLButtonElement>('record'),
+  pause: $<HTMLButtonElement>('pause'),
   timer: $('timer'),
   meter: $('meter'),
   notes: $<HTMLTextAreaElement>('notes'),
@@ -51,6 +52,8 @@ let root: FileSystemDirectoryHandle | null = null;
 let recordings: Recording[] = [];
 let selected: string | null = null;
 let startedAt = 0;
+/** Milliseconds banked from earlier stretches, before the current pause. */
+let recorded = 0;
 let ticker: number | undefined;
 /** Object URL for the audio player in the detail panel. Revoked on switch. */
 let audioUrl: string | null = null;
@@ -269,8 +272,17 @@ function block(label: string, text: string | null, fallback: string): HTMLDivEle
 
 // ---------------------------------------------------------------- recording
 
+/**
+ * Time actually recorded, which is not the time since Record was pressed: a
+ * break in the middle of a lecture should not show up as an hour of talk that
+ * is not in the file.
+ */
+function recordedMs(): number {
+  return recorded + (recorder.paused ? 0 : Date.now() - startedAt);
+}
+
 function tick(): void {
-  ui.timer.textContent = formatDuration(Date.now() - startedAt);
+  ui.timer.textContent = formatDuration(recordedMs());
 }
 
 /**
@@ -308,17 +320,55 @@ async function startRecording(): Promise<void> {
   if (stream) await meter.start(stream);
 
   startedAt = Date.now();
+  recorded = 0;
   tick();
   ticker = window.setInterval(tick, 250);
   ui.record.textContent = 'Stop';
   ui.record.classList.add('is-recording');
   ui.timer.classList.add('live');
+  ui.pause.textContent = 'Pause';
+  ui.pause.classList.remove('hidden');
   ui.title.disabled = true;
   say('Recording. Type your notes as you listen.');
 }
 
+/**
+ * A break between lectures should not become a second recording. Pausing keeps
+ * the microphone open and the file open, and writes nothing in between.
+ */
+async function togglePause(): Promise<void> {
+  if (!recorder.active) return;
+
+  if (recorder.paused) {
+    recorder.resume();
+    startedAt = Date.now();
+    ticker = window.setInterval(tick, 250);
+    // A fresh meter on the same stream; the old one released its audio device
+    // when we paused.
+    const stream = recorder.mediaStream;
+    if (stream) await meter.start(stream);
+    ui.pause.textContent = 'Pause';
+    ui.timer.classList.add('live');
+    ui.record.classList.add('is-recording');
+    say('Recording. Type your notes as you listen.');
+    return;
+  }
+
+  recorder.pause();
+  recorded += Date.now() - startedAt;
+  window.clearInterval(ticker);
+  tick();
+  // Flat bars while paused, which is the truth: nothing is being captured.
+  meter.stop();
+  ui.pause.textContent = 'Resume';
+  ui.timer.classList.remove('live');
+  ui.record.classList.remove('is-recording');
+  say('Paused. Nothing is being recorded. Press Resume to carry on.');
+}
+
 async function stopRecording(): Promise<void> {
   window.clearInterval(ticker);
+  ui.pause.classList.add('hidden');
   // Before recorder.stop(), so the meter lets go of the stream while it is
   // still alive rather than reading a track that is already ending.
   meter.stop();
@@ -419,6 +469,7 @@ ui.micSettings.addEventListener('click', () => {
 ui.record.addEventListener('click', () => {
   void (recorder.active ? stopRecording() : startRecording());
 });
+ui.pause.addEventListener('click', () => void togglePause());
 ui.language.addEventListener('change', () => void rememberLanguage(ui.language.value));
 ui.pickFolder.addEventListener('click', () => void choose());
 ui.setupPick.addEventListener('click', () => void setupPickClicked());
