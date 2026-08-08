@@ -11,6 +11,8 @@ import {
 const MODEL = 'Xenova/whisper-base';
 const CHUNK_S = 30;
 const STRIDE_S = 5;
+/** Longest run of tokens allowed to repeat before generation is forced to move on. */
+const NO_REPEAT_WORDS = 6;
 const SAMPLE_RATE = 16000;
 
 /** A Whisper language code. Always a real language — never "let it decide". */
@@ -136,6 +138,13 @@ self.addEventListener('message', async (event: MessageEvent<ToWorker>) => {
       // transformers.js has no detection yet and quietly assumes English, which
       // is the bug that made Croatian come back in English in the first place.
       language,
+      // Whisper gets stuck. On a quiet room, or noise that sounds vaguely like
+      // speech, it will latch onto a phrase and repeat it hundreds of times —
+      // one recording here lost 434 words in a row to "like a city". Forbidding
+      // a repeated run of this many words breaks the loop at the second
+      // repetition. Real speech does not repeat six words verbatim back to
+      // back, so nothing genuine is lost.
+      no_repeat_ngram_size: NO_REPEAT_WORDS,
       // Typed as TextStreamer upstream, but generate() only ever calls
       // put()/end() — the BaseStreamer contract this implements.
       streamer: new ChunkCounter(id, total) as unknown as TextStreamer,
