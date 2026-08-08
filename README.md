@@ -72,6 +72,13 @@ the wrong device looks exactly like a working one until you press Stop and read
 an empty transcript. If the bars are flat while you are talking, Blab cannot
 hear you. Fix it now rather than after the talk.
 
+There is a **Pause** button beside Record. A break in the middle of a lecture
+does not have to become two recordings: pausing keeps the microphone and the
+file open and writes nothing in between, so the break costs no disk and no
+transcription time. The timer counts recorded time rather than time since you
+pressed Record, and the bars go flat while paused, because nothing is being
+captured.
+
 Do not make folders inside it yourself. Blab names them, and a folder it did
 not name is invisible to it.
 
@@ -120,6 +127,29 @@ break words in odd places. See below for swapping in a larger model.
 Only English and Croatian are listed because those are the two that have been
 used in anger. The model knows 99 languages; adding one is a single line in
 `index.html`.
+
+## When the room beats the microphone
+
+Whisper writes what it hears. Put a laptop at the back of a lecture hall and it
+hears a room, not a speaker, and then it guesses.
+
+Its way of guessing is repetition: it fastens onto a phrase and repeats it.
+One talk recorded here came back with a single phrase repeated 434 times, and
+39% of the whole transcript inside loops like that. Blab now forbids any six
+word run from repeating, which cuts a loop off at its second repetition, so a
+poor recording gives you a short honest transcript instead of a long worthless
+one. It is also faster, because generating hundreds of repeated words was
+costing real time.
+
+What it cannot do is invent the words the microphone never caught. The same
+talk holds 60 words per minute of real speech where a well captured one holds
+170. No setting recovers the rest.
+
+So the fix is physical. Get within two or three metres of whoever is speaking,
+or put any external microphone closer — even earbuds on the table beat a laptop
+across the room. And do not trust loud bars alone: the microphone's automatic
+gain will happily raise a quiet room until the meter looks healthy while it is
+mostly amplifying air conditioning.
 
 ## How long can a talk be
 
