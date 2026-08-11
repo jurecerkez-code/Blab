@@ -1,0 +1,90 @@
+# Builds both installers and leaves them on a draft release.
+#
+# This exists because electron-builder only builds for the machine it runs on,
+# so a Windows laptop cannot produce the Mac dmg and a Mac cannot produce the
+# Windows exe. Until now that meant every release needed two computers, and it
+# showed: 0.3.2 shipped as an exe with no dmg beside it, so anyone on a Mac was
+# still on 0.3.1.
+#
+# GitHub lends out both machines, so the two builds happen side by side and land
+# on the same release.
+#
+# The result is always a DRAFT. Nothing is public until a human reads it and
+# presses publish.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  # So a build can be tried without tagging anything first.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      # One platform failing must not cancel the other. Half a release is worth
+      # having; it is what every release before this one was.
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            installer: Blab-*.dmg
+          - os: windows-latest
+            installer: Blab-Setup-*.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # The one network moment in the project: the Whisper weights, which are
+      # not in git and are baked into the installer.
+      - run: npm run setup
+
+      - run: npm run build
+
+      # Blab is not signed by anybody — the README says so and explains the
+      # warning users get. Without this, electron-builder goes looking for a
+      # certificate on the runner and fails when it does not find one, rather
+      # than doing the ad-hoc signing the config asks for.
+      - run: npm run package
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.os }}
+          path: ${{ matrix.installer }}
+          if-no-files-found: error
+
+  draft:
+    needs: build
+    # Only a tag becomes a release. A manual run is for finding out whether the
+    # build still works, and leaves the artifacts on the run itself.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: installers
+          merge-multiple: true
+
+      - name: Draft the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          ls -lh installers
+          gh release create "$TAG" installers/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft \
+            --title "Blab ${TAG#v}" \
+            --generate-notes
