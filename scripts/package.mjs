@@ -40,7 +40,16 @@ if (!TARGET) {
 
 function run() {
   return new Promise((resolve, reject) => {
-    const args = [...TARGET.flag, `-c.directories.output=${out}`].map(quote);
+    // --publish never, because this script builds an installer and puts it in a
+    // folder. It has never had anything to do with releasing one.
+    //
+    // Left to itself electron-builder disagrees: on any commit that carries a
+    // git tag it decides the build must be a release, goes looking for a GitHub
+    // token, and fails the whole run when there is none — after both installers
+    // have already been written. Which is a strange way to lose a build that
+    // worked, and stranger still on a laptop that was never going to publish
+    // anything.
+    const args = [...TARGET.flag, '--publish', 'never', `-c.directories.output=${out}`].map(quote);
     const child = spawn(quote(BUILDER), args, { cwd: ROOT, stdio: 'inherit', shell: WINDOWS });
     child.on('error', reject);
     child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`electron-builder exited ${code}`))));
