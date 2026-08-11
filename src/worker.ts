@@ -6,6 +6,7 @@ import {
   type AutomaticSpeechRecognitionPipeline,
   type TextStreamer,
 } from '@huggingface/transformers';
+import { fromChunks } from './timeline';
 
 /** Swap for 'Xenova/whisper-tiny' if base is too slow on your laptop. */
 const MODEL = 'Xenova/whisper-base';
@@ -27,10 +28,13 @@ export type ToWorker = {
   ortPath: string;
 };
 
+/** A stretch of speech and the millisecond of the recording it starts at. */
+export type Segment = { at: number; text: string };
+
 export type FromWorker =
   | { type: 'loading' }
   | { type: 'progress'; id: string; done: number; total: number }
-  | { type: 'done'; id: string; text: string }
+  | { type: 'done'; id: string; text: string; segments: Segment[] }
   | { type: 'failed'; id: string; message: string; modelMissing: boolean };
 
 const post = (msg: FromWorker) => self.postMessage(msg);
@@ -129,7 +133,16 @@ self.addEventListener('message', async (event: MessageEvent<ToWorker>) => {
     const result = await transcribe(audio, {
       chunk_length_s: CHUNK_S,
       stride_length_s: STRIDE_S,
-      return_timestamps: false,
+      // Whisper knows when each phrase was said and will tell us for free — it
+      // is the same generation either way. Having it means a transcript line
+      // can point at a second of the audio, which is what makes clicking one
+      // jump the player there.
+      //
+      // It does cost a little of the guard below. Timestamps are tokens too, so
+      // a repetition that straddles a segment boundary has one wedged into the
+      // middle of it and stops looking like a repeat. Loops inside a segment —
+      // which is nearly all of them — are still cut at the second repetition.
+      return_timestamps: true,
       // Whisper can transcribe or translate, and left to itself it sometimes
       // picks translate. Blab always wants the words that were actually said,
       // in the language they were said in, so this is pinned.
@@ -150,8 +163,12 @@ self.addEventListener('message', async (event: MessageEvent<ToWorker>) => {
       streamer: new ChunkCounter(id, total) as unknown as TextStreamer,
     });
 
-    const text = (Array.isArray(result) ? result.map((r) => r.text).join(' ') : result.text).trim();
-    post({ type: 'done', id, text });
+    const parts = Array.isArray(result) ? result : [result];
+    const text = parts
+      .map((r) => r.text)
+      .join(' ')
+      .trim();
+    post({ type: 'done', id, text, segments: fromChunks(parts) });
   } catch (err) {
     // A failed load must not be cached, or every later attempt fails too. A
     // model that loaded fine and then hit a bad clip is worth keeping — it

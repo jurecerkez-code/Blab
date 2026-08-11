@@ -247,3 +247,49 @@ textarea {
 }
 
 #detail .block pre.empty { color: var(--muted); font-style: italic; }
+
+#detail .block .hint {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Timed lines. Same box as the pre above, so a recording made before Blab kept
+   times does not look like a different app. */
+#detail .timed {
+  background: #14140f;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+#detail .line {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  align-items: baseline;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+
+/* Only the ones that can actually jump somewhere look like they can. */
+#detail button.line { cursor: pointer; }
+#detail button.line:hover { background: var(--panel); }
+#detail button.line:hover .at { color: var(--accent); }
+#detail button.line:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+#detail .line .at {
+  flex: none;
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+#detail .line .said { white-space: pre-wrap; word-wrap: break-word; }

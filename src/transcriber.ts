@@ -1,6 +1,12 @@
-import type { FromWorker, Language, ToWorker } from './worker';
+import type { FromWorker, Language, Segment, ToWorker } from './worker';
 
-export type { Language };
+export type { Language, Segment };
+
+/**
+ * The words, and where each phrase sits in the audio. `segments` is empty only
+ * if Whisper returned no timestamps at all; `text` is always the whole thing.
+ */
+export type Transcript = { text: string; segments: Segment[] };
 
 export type Progress =
   | { stage: 'loading' }
@@ -32,7 +38,7 @@ export class Transcriber {
     audio: Float32Array,
     language: Language,
     onProgress: (p: Progress) => void,
-  ): Promise<string> {
+  ): Promise<Transcript> {
     const run = this.queue.then(() => this.send(audio, language, onProgress));
     this.queue = run.catch(() => {});
     return run;
@@ -42,7 +48,7 @@ export class Transcriber {
     audio: Float32Array,
     language: Language,
     onProgress: (p: Progress) => void,
-  ): Promise<string> {
+  ): Promise<Transcript> {
     const id = String(++this.jobs);
     const worker = this.spawn();
 
@@ -57,7 +63,7 @@ export class Transcriber {
             return onProgress({ stage: 'working', done: msg.done, total: msg.total });
           case 'done':
             worker.removeEventListener('message', listener);
-            return resolve(msg.text);
+            return resolve({ text: msg.text, segments: msg.segments });
           case 'failed':
             worker.removeEventListener('message', listener);
             return reject(
