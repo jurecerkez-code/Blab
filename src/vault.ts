@@ -135,6 +135,46 @@ export async function write(
   await stream.close();
 }
 
+/**
+ * Writes a copy of a recording somewhere else — a desktop, a shared drive, the
+ * folder an essay is being written in. Nothing here touches the recording's own
+ * folder: this is for the copy you are about to hand to someone.
+ *
+ * Returns false when the save dialog was closed, so the caller can stay quiet
+ * about it rather than reporting a failure that never happened.
+ */
+export async function saveAs(name: string, text: string, mime: string): Promise<boolean> {
+  const picker = window.showSaveFilePicker;
+  if (picker) {
+    try {
+      const handle = await picker.call(window, {
+        id: 'blab-export',
+        suggestedName: name,
+        types: [{ accept: { [mime]: [`.${name.split('.').pop()}`] } }],
+      });
+      const stream = await handle.createWritable();
+      await stream.write(text);
+      await stream.close();
+      return true;
+    } catch (err) {
+      if ((err as DOMException)?.name === 'AbortError') return false;
+      throw err;
+    }
+  }
+
+  // No save dialog here, so fall back to a download. It lands wherever the
+  // browser puts downloads rather than where it was asked to, which is worse,
+  // but it is the difference between the button working and not existing.
+  const url = URL.createObjectURL(new Blob([text], { type: mime }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  link.click();
+  // Revoking straight away can cancel the download before it starts.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return true;
+}
+
 /** Null when the file is not there — a recording may have no transcript yet. */
 export async function readFile(dir: FileSystemDirectoryHandle, name: string): Promise<File | null> {
   try {

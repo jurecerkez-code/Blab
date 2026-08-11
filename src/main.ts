@@ -1,8 +1,11 @@
 import './style.css';
 import { decodeForWhisper } from './audio';
+import { type Scored, highlights, sentences } from './highlights';
 import { Meter } from './meter';
+import { NoteClock } from './notes';
 import { Recorder, formatDuration } from './recorder';
 import { recallLanguage, recallRoot, rememberLanguage, rememberRoot } from './store';
+import { type Line, parse, render, stamp } from './timeline';
 import { ModelMissingError, Transcriber, type Language } from './transcriber';
 import {
   AUDIO,
@@ -16,6 +19,7 @@ import {
   pickRoot,
   readFile,
   readText,
+  saveAs,
   write,
 } from './vault';
 
@@ -45,6 +49,7 @@ const ui = {
 const recorder = new Recorder();
 const meter = new Meter(ui.meter);
 const transcriber = new Transcriber();
+const noteClock = new NoteClock();
 /** Only macOS has a pane to send anyone to, so only there is the button worth offering. */
 let canOpenMicSettings = false;
 void window.blab?.micStatus().then((s) => (canOpenMicSettings = s !== 'unsupported'));
@@ -167,26 +172,67 @@ async function open(rec: Recording): Promise<void> {
   heading.textContent = rec.title;
   ui.detail.append(heading);
 
+  let seek: ((ms: number) => void) | null = null;
   if (audio) {
     audioUrl = URL.createObjectURL(audio);
     const player = document.createElement('audio');
     player.controls = true;
     player.src = audioUrl;
     ui.detail.append(player);
+    seek = (ms) => {
+      player.currentTime = ms / 1000;
+      void player.play();
+    };
   }
 
+  const view = read(notes, transcript);
+
+  if (view.picks.length) {
+    const why = 'Picked out of the words below. Nothing here was written by a machine.';
+    ui.detail.append(timedBlock('Worth going back to', view.picks, seek, why));
+  }
   ui.detail.append(
-    block('Your notes', notes, 'You did not write any notes.'),
-    block('Transcript', transcript, 'No transcript yet.'),
-    actions(rec, dir, notes, transcript),
+    view.noteLines
+      ? timedBlock('Your notes', view.noteLines, seek)
+      : block('Your notes', notes, 'You did not write any notes.'),
+    view.timedScript
+      ? timedBlock('Transcript', view.timedScript, seek)
+      : block('Transcript', transcript, 'No transcript yet.'),
+    actions(rec, dir, view, notes, transcript),
   );
   ui.detail.classList.remove('hidden');
   await refreshList();
 }
 
+/** Everything the detail panel shows, worked out from the two files on disk. */
+type View = {
+  /** Null for notes taken before Blab timed them — then they show as they are. */
+  noteLines: Line[] | null;
+  /** Null for a transcript saved before Blab timed it. */
+  timedScript: Line[] | null;
+  picks: Scored[];
+};
+
+function read(notes: string | null, transcript: string | null): View {
+  const noteLines = notes?.trim() ? parse(notes) : null;
+  const timedScript = transcript?.trim() ? parse(transcript) : null;
+  // An untimed transcript still gets highlights, cut into sentences instead of
+  // Whisper's phrases. They just have nowhere to jump to.
+  const lines: Scored[] = timedScript ?? (transcript?.trim() ? sentences(transcript) : []);
+  return {
+    noteLines,
+    timedScript,
+    picks: highlights(
+      lines,
+      (noteLines ?? []).map((l) => l.at),
+    ),
+  };
+}
+
 function actions(
   rec: Recording,
   dir: FileSystemDirectoryHandle,
+  view: View,
   notes: string | null,
   transcript: string | null,
 ): HTMLDivElement {
@@ -196,7 +242,7 @@ function actions(
   const copy = document.createElement('button');
   copy.textContent = 'Copy all';
   copy.addEventListener('click', async () => {
-    if (await copyToClipboard(asOneBlock(rec, notes, transcript))) {
+    if (await copyToClipboard(asOneBlock(rec, view, notes, transcript))) {
       copy.textContent = 'Copied';
       setTimeout(() => (copy.textContent = 'Copy all'), 1500);
     } else {
@@ -204,6 +250,16 @@ function actions(
     }
   });
   bar.append(copy);
+
+  // Copy all covers pasting it somewhere. This covers handing someone a file.
+  bar.append(
+    exportButton('Save .md', `${rec.dir}.md`, 'text/markdown', () =>
+      asOneBlock(rec, view, notes, transcript),
+    ),
+    exportButton('Save .txt', `${rec.dir}.txt`, 'text/plain', () =>
+      asPlainText(asOneBlock(rec, view, notes, transcript)),
+    ),
+  );
 
   // Only shown when a recording never got its transcript — usually because the
   // model was not set up yet at the time.
@@ -242,19 +298,119 @@ async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
-/** One clean text block, ready to paste into an AI. */
-function asOneBlock(rec: Recording, notes: string | null, transcript: string | null): string {
-  return [
-    `# ${rec.title}`,
-    rec.when.toLocaleString(),
-    '',
+function exportButton(
+  label: string,
+  filename: string,
+  mime: string,
+  body: () => string,
+): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.textContent = label;
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    try {
+      if (await saveAs(filename, body(), mime)) say(`Saved ${filename}.`);
+    } catch (err) {
+      say(`Could not save that copy: ${(err as Error).message}`, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
+  return button;
+}
+
+/**
+ * One clean text block: everything about the recording, in order, ready to
+ * paste into an AI or hand to someone. The full transcript is always in it —
+ * the highlights sit above it rather than in place of it, because they are a
+ * way in, not a replacement.
+ */
+function asOneBlock(
+  rec: Recording,
+  view: View,
+  notes: string | null,
+  transcript: string | null,
+): string {
+  const out = [`# ${rec.title}`, rec.when.toLocaleString(), ''];
+  if (view.picks.length) {
+    out.push(
+      '## Worth going back to',
+      ...view.picks.map((p) => (p.at == null ? `- ${p.text}` : `- ${stamp(p.at)}${p.text}`)),
+      '',
+    );
+  }
+  out.push(
     '## My notes',
     notes?.trim() || '(none)',
     '',
     '## Transcript',
     transcript?.trim() || '(none)',
     '',
-  ].join('\n');
+  );
+  return out.join('\n');
+}
+
+/** The same thing for anywhere that shows markdown as the characters it is. */
+function asPlainText(markdown: string): string {
+  return markdown
+    .split('\n')
+    .map((line) => line.replace(/^#{1,6} /, '').replace(/^- /, '  '))
+    .join('\n');
+}
+
+/**
+ * Lines with the time each one belongs to. Click one and the player above jumps
+ * there, which is the whole reason the times are kept: a two hour lecture is
+ * unusable as a wall of text and fine as something you can land in the middle
+ * of.
+ */
+function timedBlock(
+  label: string,
+  lines: Scored[],
+  seek: ((ms: number) => void) | null,
+  hint?: string,
+): HTMLDivElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'block';
+  const h4 = document.createElement('h4');
+  h4.textContent = label;
+  wrap.append(h4);
+
+  if (hint) {
+    const p = document.createElement('p');
+    p.className = 'hint';
+    p.textContent = hint;
+    wrap.append(p);
+  }
+
+  const list = document.createElement('div');
+  list.className = 'timed';
+  for (const line of lines) {
+    const at = line.at;
+    // Nothing to jump to without both a time and a player, and a button that
+    // does nothing is worse than a plain line.
+    const clickable = seek !== null && at !== null;
+    const row = document.createElement(clickable ? 'button' : 'div');
+    row.className = 'line';
+    if (at !== null) {
+      const when = document.createElement('span');
+      when.className = 'at';
+      when.textContent = formatDuration(at);
+      row.append(when);
+    }
+    const said = document.createElement('span');
+    said.className = 'said';
+    said.textContent = line.text;
+    row.append(said);
+    if (clickable) {
+      row.title = 'Play from here';
+      row.addEventListener('click', () => seek(at));
+    }
+    list.append(row);
+  }
+
+  wrap.append(list);
+  return wrap;
 }
 
 function block(label: string, text: string | null, fallback: string): HTMLDivElement {
@@ -321,6 +477,7 @@ async function startRecording(): Promise<void> {
 
   startedAt = Date.now();
   recorded = 0;
+  noteClock.reset(ui.notes.value);
   tick();
   ticker = window.setInterval(tick, 250);
   ui.record.textContent = 'Stop';
@@ -378,7 +535,9 @@ async function stopRecording(): Promise<void> {
   ui.record.classList.remove('is-recording');
 
   const audio = await recorder.stop();
-  const notes = ui.notes.value;
+  // Each line goes to disk with the moment it was typed in front of it, so the
+  // notes and the transcript end up on one time axis.
+  const notes = noteClock.render(ui.notes.value);
   const title = ui.title.value.trim() || 'Untitled';
 
   let saved: { dir: string; handle: FileSystemDirectoryHandle } | null = null;
@@ -414,7 +573,7 @@ async function transcribeInto(dir: FileSystemDirectoryHandle, name: string): Pro
 
     // Read at the moment of transcribing, not when the recording started, so
     // switching the picker and pressing Transcribe again does what it looks like.
-    const text = await transcriber.transcribe(samples, ui.language.value as Language, (p) => {
+    const result = await transcriber.transcribe(samples, ui.language.value as Language, (p) => {
       if (p.stage === 'loading') return say('Starting Whisper on this machine…');
       say(
         p.total > 1
@@ -423,7 +582,15 @@ async function transcribeInto(dir: FileSystemDirectoryHandle, name: string): Pro
       );
     });
 
-    await write(dir, TRANSCRIPT, text);
+    // One line per phrase, each with the second it was said at. Whisper hands
+    // the times over as part of the same generation, so this costs nothing and
+    // is what lets a line be clicked.
+    //
+    // The times are the feature; the words are the point. If the timed version
+    // has lost any of them the plain text goes to disk instead, and a talk you
+    // cannot click beats a talk that is missing its last two minutes.
+    const timed = render(result.segments);
+    await write(dir, TRANSCRIPT, keptEverything(timed, result.text) ? timed : result.text);
     say(`Transcript saved to ${name}/${TRANSCRIPT}.`);
     await reopenIfShowing(name);
   } catch (err) {
@@ -437,6 +604,19 @@ async function transcribeInto(dir: FileSystemDirectoryHandle, name: string): Pro
       say(`Could not transcribe (audio and notes are saved): ${(err as Error).message}`, true);
     }
   }
+}
+
+/**
+ * True when the timed transcript still holds every word the plain one does.
+ *
+ * Compared as words with the times taken back off, because the two differ in
+ * whitespace and line breaks by design and neither of those is a word. Empty
+ * segments mean the pipeline returned no times at all, which is a fall back
+ * rather than a loss.
+ */
+function keptEverything(timed: string, plain: string): boolean {
+  const words = (s: string) => s.replace(/\[[\d:]+\]/g, ' ').split(/\s+/).filter(Boolean);
+  return timed.trim().length > 0 && words(timed).length >= words(plain).length;
 }
 
 /** Refreshes the detail panel if the recording that just changed is open. */
@@ -470,6 +650,12 @@ ui.record.addEventListener('click', () => {
   void (recorder.active ? stopRecording() : startRecording());
 });
 ui.pause.addEventListener('click', () => void togglePause());
+// Typing is the only place a note's time can come from, and it has to be read
+// here rather than at Stop: by then every line looks the same age.
+ui.notes.addEventListener('input', () => {
+  if (!recorder.active) return;
+  noteClock.mark(ui.notes.value, ui.notes.selectionStart ?? ui.notes.value.length, recordedMs());
+});
 ui.language.addEventListener('change', () => void rememberLanguage(ui.language.value));
 ui.pickFolder.addEventListener('click', () => void choose());
 ui.setupPick.addEventListener('click', () => void setupPickClicked());

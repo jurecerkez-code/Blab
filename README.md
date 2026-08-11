@@ -84,7 +84,14 @@ not name is invisible to it.
 
 Click any old recording to read it, play it back, or press **Copy all**. That
 puts the title, your notes and the transcript on your clipboard as one block.
-Paste it into an AI, an email, or wherever it needs to go.
+Paste it into an AI, an email, or wherever it needs to go. **Save .md** and
+**Save .txt** write the same block as a file, wherever you point them, for the
+times someone wants an attachment rather than a paste.
+
+Every line in there says when it happened, and clicking one plays the audio
+from that second. That works for the transcript and for your own notes, which
+is the useful half: you wrote "ask him about the deadline" at fourteen minutes,
+so click it and hear what was actually said at fourteen minutes.
 
 ## Where your stuff goes
 
@@ -98,12 +105,65 @@ your-folder/
 
 Plain files. No database, no index, no hidden state.
 
+Both text files carry the time each line belongs to, counted from the start of
+the recording:
+
+```
+[00:00] Right, we should probably get started.
+[00:31] The first thing is the database migration.
+```
+
+That is still plain text. `grep` finds it, any editor opens it, and the times
+are the same numbers in both files — a note at `[14:20]` and a transcript line
+at `[14:20]` are the same moment of audio. They line up even when the talk had
+a break in it, because a pause writes nothing: recorded time and position in
+`audio.webm` never drift apart.
+
+Your notes are split where you stopped typing. Write a bit, listen, write a bit
+more, and each time you come back is a new line with its own time — you do not
+have to press Enter, and a paragraph you never broke up is not one moment.
+Pressing Enter splits it too, immediately, because that is you saying where a
+thought ended.
+
+Notes typed before you press Record have no time to carry and get no prefix.
+Recordings made by an older Blab have none either, and open exactly as they
+always did.
+
 Open them in any editor. Search them with anything. Back them up by copying the
 folder. Blab does not need to be running. Blab does not need to exist.
 
 The folder name is `date_time_title`, so titles come back as slugs. "API
 Workshop" shows up as "Api workshop" in the list. The files are what matter.
 That is the price of not keeping a separate index.
+
+## Worth going back to
+
+Above the transcript there is a short list of lines from the talk. Not a
+summary — a shortlist. Every line in it was said out loud and is quoted whole,
+with the time it was said at, so you can click one and hear it.
+
+It is not written by a model, and that is a choice rather than a shortcut. A
+small language model small enough to ship inside this installer would write
+smoother paragraphs and would also, on exactly the transcripts that are already
+hard to trust, state decisions nobody took. The transcript further up this file
+that repeated one phrase 434 times is the input a summariser would have been
+handed. A wrong pick here costs you one dull line, and you can see the time
+beside it and go check.
+
+Two things decide the shortlist. The first is what the talk keeps coming back
+to — a word said forty times is the subject, a word said once is an aside. The
+second is where you were typing. A note written at fourteen minutes says the
+speaker was worth writing down at fourteen minutes, and no statistic beats
+someone who was in the room, so lines near your notes are pulled up the list.
+
+Recordings under a couple of minutes get nothing. There is no shape in them to
+find, and three padded lines would only look like there was.
+
+If you want real minutes, press **Copy all** and paste it into a large model.
+Everything it needs, including the full transcript and your notes with their
+times, is in that one block. That stays the honest division of labour: Blab
+does the part that has to happen on your machine, and does not pretend a 0.6
+billion parameter model is the same thing as a good one.
 
 ## What language it writes in
 
@@ -237,6 +297,12 @@ move rather than only that they exist. Animation is the part that cannot be
 tested by reading the page: a window that is never drawn never runs an
 animation frame, so those tests need a real browser to mean anything.
 
+The times, the note clock and the shortlist are text in and text out, so their
+tests are plain functions with no page at all. The one that matters is scored
+against a meeting the length Whisper actually cuts one into. A handful of tidy
+sentences would prove nothing: telling the subject of a talk from the chat
+around it is the whole job, and it only becomes visible over enough lines.
+
 `app:check` is the useful one. It opens the app, asks for the microphone, and
 pushes two seconds of silence through the real Whisper worker. Four lines, and
 it exits non zero if any of them failed:
@@ -295,6 +361,9 @@ src/
   audio.ts        webm into mono 16 kHz samples, what Whisper wants
   transcriber.ts  talks to the worker, queues jobs
   worker.ts       Whisper itself, off the main thread
+  timeline.ts     the [mm:ss] prefix, written and read back
+  notes.ts        when each line of your notes was typed
+  highlights.ts   the shortlist, picked with arithmetic and no model
   store.ts        remembers your folder and your language
 scripts/
   setup.mjs       the one network moment
