@@ -278,6 +278,21 @@ npm run package
 
 That writes the installer for whatever machine you ran it on into the folder.
 
+Needing two computers to cut one release is how 0.3.2 went out as an exe with
+no dmg beside it, leaving everyone on a Mac a version behind. So pushing a tag
+now builds both:
+
+```
+git tag v0.4.0
+git push origin v0.4.0
+```
+
+GitHub lends out a Windows machine and a Mac, runs the same `npm run package`
+on each, and leaves both installers on a **draft** release. Nothing is public
+until someone reads it and presses publish. `.github/workflows/release.yml` is
+the whole of it, and you can run it by hand from the Actions tab to check the
+build still works without tagging anything.
+
 `npm run setup` is the only network moment in the whole project. It pulls the
 Whisper model from HuggingFace, with the same files copied onto a Blab release
 as a backup, so setup keeps working even if those URLs move one day.
