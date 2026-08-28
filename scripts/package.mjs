@@ -30,6 +30,10 @@ const TARGETS = {
   // from the config, and the mac build is universal (Intel + Apple Silicon).
   darwin: { flag: ['--mac'], artifact: /^Blab-.*\.dmg$/ },
   win32: { flag: ['--win', 'nsis'], artifact: /^Blab-Setup-.*\.exe$/ },
+  // One file that runs on any distribution, with nothing to install and no
+  // package manager to argue with — the closest Linux has to what the dmg and
+  // the exe already are.
+  linux: { flag: ['--linux', 'AppImage'], artifact: /^Blab-.*\.AppImage$/ },
 };
 
 const TARGET = TARGETS[process.platform];

@@ -6,7 +6,7 @@ transcript on your own computer.
 No account. No login. No cloud. No API key. No subscription. Nothing leaves
 your machine.
 
-Windows and Mac. Free. One feature.
+Windows, Mac and Linux. Free. One feature.
 
 ## Download
 
@@ -14,10 +14,12 @@ Windows and Mac. Free. One feature.
 |---------------|------|------------|
 | **Windows PC** | `Blab-Setup-*.exe` | Run it. Windows shows a warning. Click **More info**, then **Run anyway** |
 | **Mac** | `Blab-*.dmg` | Open it, drag Blab into Applications. First time only: double click Blab, click **Done**, then go to **System Settings → Privacy & Security** and click **Open Anyway** |
+| **Linux** | `Blab-*.AppImage` | Right click it, Properties, tick **Allow executing file as program**. Then double click. Or `chmod +x Blab-*.AppImage && ./Blab-*.AppImage` |
 
-Both from the [releases page](https://github.com/jurecerkez-code/Blab/releases/latest).
+All three from the [releases page](https://github.com/jurecerkez-code/Blab/releases/latest).
 One file for every Mac, old or new. You do not need to know which chip is in
-your computer.
+your computer. The Linux file installs nothing and needs no package manager —
+it is one executable you can keep wherever you like.
 
 ### About that warning
 
@@ -27,6 +29,9 @@ wants a few hundred euros.
 
 Blab makes no money, so it pays nobody, so you get one warning screen on the
 way in.
+
+Linux asks for none of this. An AppImage only needs to be marked executable,
+which is the same click any downloaded program gets.
 
 On Mac that screen is titled **"Blab" Not Opened** and says Apple could not
 verify Blab is free of malware. The only two buttons are **Move to Trash** and
@@ -48,14 +53,31 @@ yourself.
 
 ### Why the file is so big
 
-The speech model is inside it. 153 MB on Windows, 276 MB on Mac. The Mac one is
-bigger because it holds a version for both Apple and Intel chips in one file.
+The speech model is inside it. 153 MB on Windows, 179 MB on Linux, 276 MB on
+Mac. The Mac one is bigger because it holds a version for both Apple and Intel
+chips in one file.
 
 Once it is installed, Blab downloads nothing, ever. The first launch takes
 about ten seconds while the model loads. Every launch after that is two or
 three.
 
-Linux is not built yet.
+The Linux build starts with Chromium's own sandbox switched off. That is
+electron-builder's default for an AppImage rather than a choice made here, and
+it has a reason: the sandbox needs a small root-owned helper, an AppImage is a
+single unprivileged file and cannot ship one. The generated menu entry passes
+`--no-sandbox` for you.
+
+Run the file straight from a terminal and it gets no such flag, so on Ubuntu
+24.04, and any distribution that restricts unprivileged user namespaces, it
+will refuse to start. Pass the flag yourself and it opens:
+
+```
+./Blab-*.AppImage --no-sandbox
+```
+
+None of that touches what keeps Blab to itself. The window still has no Node
+access, and `connect-src 'self'` still forbids the network, on Linux exactly
+as on the other two.
 
 ## Using it
 
@@ -255,7 +277,9 @@ The rest, if you want to check:
 
 - The transcriber runs with `allowRemoteModels = false`. A missing file makes
   it fail loudly instead of quietly fetching one.
-- The window has no Node access and runs sandboxed.
+- The window has no Node access, and runs sandboxed on Windows and Mac. The
+  Linux AppImage cannot, for the reason given further up; nothing else about
+  it changes.
 - USB, HID and serial devices are refused outright.
 - Three permissions are granted. Microphone, the folder you picked, clipboard.
 - `npm run setup` is the only code here that downloads anything. It runs once,
@@ -266,7 +290,8 @@ Your audio, your notes and your transcripts stay in your folder.
 ## Building it yourself
 
 You need [Node.js](https://nodejs.org) 20 or newer, and you can only build for
-the system you are sitting at. Windows makes the exe, a Mac makes the dmg.
+the system you are sitting at. Windows makes the exe, a Mac makes the dmg, a
+Linux machine makes the AppImage.
 
 ```
 git clone https://github.com/jurecerkez-code/Blab.git
@@ -287,11 +312,11 @@ git tag v0.4.0
 git push origin v0.4.0
 ```
 
-GitHub lends out a Windows machine and a Mac, runs the same `npm run package`
-on each, and leaves both installers on a **draft** release. Nothing is public
-until someone reads it and presses publish. `.github/workflows/release.yml` is
-the whole of it, and you can run it by hand from the Actions tab to check the
-build still works without tagging anything.
+GitHub lends out a Windows machine, a Mac and a Linux box, runs the same
+`npm run package` on each, and leaves all three installers on a **draft**
+release. Nothing is public until someone reads it and presses publish.
+`.github/workflows/release.yml` is the whole of it, and you can run it by hand
+from the Actions tab to check the build still works without tagging anything.
 
 `npm run setup` is the only network moment in the whole project. It pulls the
 Whisper model from HuggingFace, with the same files copied onto a Blab release
