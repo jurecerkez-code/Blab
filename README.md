@@ -21,6 +21,39 @@ One file for every Mac, old or new. You do not need to know which chip is in
 your computer. The Linux file installs nothing and needs no package manager —
 it is one executable you can keep wherever you like.
 
+### Or from a terminal
+
+One command, and the same command on all three systems in everything but the
+name of the shell. It finds the latest release, downloads the one file for the
+machine you are on, and puts it where that system expects an app to live.
+
+**Mac and Linux**
+
+```
+curl -fsSL https://raw.githubusercontent.com/jurecerkez-code/Blab/main/scripts/install.sh | sh
+```
+
+**Windows**, in PowerShell
+
+```
+irm https://raw.githubusercontent.com/jurecerkez-code/Blab/main/scripts/install.ps1 | iex
+```
+
+On a Mac the app lands in Applications. On Linux you get `blab` on your path
+and an entry in your menu. On Windows the normal installer runs and Blab turns
+up in the Start menu. None of them asks for an administrator password, because
+Blab installs for one user and needs nothing from the system.
+
+The Mac route has one accidental advantage. That "Apple could not verify this
+app" screen is shown for files a **browser** downloaded, and `curl` does not
+mark them the same way, so it never appears. Nothing is switched off to manage
+that — the app is exactly as unsigned as it ever was, you simply never meet the
+gate. If that bothers you, use the dmg from the table above and click through
+it instead.
+
+Both scripts are short, they live in `scripts/` in this repository, and reading
+one before piping it into a shell is a reasonable thing to want to do.
+
 ### About that warning
 
 Nothing is wrong with the file. Windows and Mac both shout at any app whose
@@ -79,6 +112,26 @@ None of that touches what keeps Blab to itself. The window still has no Node
 access, and `connect-src 'self'` still forbids the network, on Linux exactly
 as on the other two.
 
+There is one more Linux thing, and it is not Blab's doing either. An AppImage
+is a small filesystem the runtime mounts, which needs FUSE, and Ubuntu has not
+shipped `libfuse2` since 22.04. On a stock install, double clicking the file
+gets you `dlopen(): error loading libfuse.so.2` and nothing else. Either
+install it:
+
+```
+sudo apt install libfuse2
+```
+
+or tell the runtime to unpack itself instead, which needs nothing:
+
+```
+APPIMAGE_EXTRACT_AND_RUN=1 ./Blab-*.AppImage --no-sandbox
+```
+
+The terminal installer further up already handles both — it checks for the
+library once and writes whichever launcher is right for your machine — which
+is the main reason to prefer it on Linux.
+
 ## Using it
 
 Pick one folder the first time. One folder for everything you will ever record.
@@ -93,6 +146,13 @@ row exists for one reason: a microphone that is muted, unplugged, or pointed at
 the wrong device looks exactly like a working one until you press Stop and read
 an empty transcript. If the bars are flat while you are talking, Blab cannot
 hear you. Fix it now rather than after the talk.
+
+Two things look after a recording while it runs. Closing the window or
+quitting asks first, rather than throwing away a talk that is not on disk yet —
+nothing is written until Stop, so on a Mac a habitual Cmd+W used to cost the
+lot. And the machine is asked to stay awake, so a lecture does not end early
+because a laptop decided it was idle. The screen may still go dark; only sleep
+is held off.
 
 There is a **Pause** button beside Record. A break in the middle of a lecture
 does not have to become two recordings: pausing keeps the microphone and the
@@ -282,8 +342,10 @@ The rest, if you want to check:
   it changes.
 - USB, HID and serial devices are refused outright.
 - Three permissions are granted. Microphone, the folder you picked, clipboard.
-- `npm run setup` is the only code here that downloads anything. It runs once,
-  while you build. It is 130 lines and you can read all of them.
+- Two things here download anything, and neither is the app. `npm run setup`
+  fetches the model once while you build; `scripts/install.sh` and its
+  PowerShell twin fetch one release file if you choose to install that way.
+  All three are short and you can read all of them.
 
 Your audio, your notes and your transcripts stay in your folder.
 
@@ -305,11 +367,11 @@ That writes the installer for whatever machine you ran it on into the folder.
 
 Needing two computers to cut one release is how 0.3.2 went out as an exe with
 no dmg beside it, leaving everyone on a Mac a version behind. So pushing a tag
-now builds both:
+now builds all three:
 
 ```
-git tag v0.4.0
-git push origin v0.4.0
+git tag v0.5.0
+git push origin v0.5.0
 ```
 
 GitHub lends out a Windows machine, a Mac and a Linux box, runs the same
@@ -392,7 +454,8 @@ bundled instead of loaded from a CDN.
 
 ```
 electron/
-  main.cjs        the desktop shell. one window, strict policy, yes to the mic
+  main.cjs        the desktop shell. one window, strict policy, yes to the mic,
+                  and it will not let a keystroke throw away a live recording
 src/
   main.ts         the one screen and all its wiring
   vault.ts        reading and writing the folder
@@ -406,9 +469,11 @@ src/
   highlights.ts   the shortlist, picked with arithmetic and no model
   store.ts        remembers your folder and your language
 scripts/
-  setup.mjs       the one network moment
+  setup.mjs       fetches the model, once, while you build
   icon.mjs        renders the app icon
   package.mjs     builds the installer and puts it where you can find it
+  install.sh      one command install, for a Mac or a Linux box
+  install.ps1     the same one for Windows
 features/
   *.feature       what each feature is supposed to do, in plain English
 tests/
