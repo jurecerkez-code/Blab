@@ -86,7 +86,7 @@ yourself.
 
 ### Why the file is so big
 
-The speech model is inside it. 153 MB on Windows, 179 MB on Linux, 276 MB on
+The speech model is inside it. 153 MB on Windows, 187 MB on Linux, 276 MB on
 Mac. The Mac one is bigger because it holds a version for both Apple and Intel
 chips in one file.
 
