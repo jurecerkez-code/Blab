@@ -1,13 +1,13 @@
-# Builds both installers and leaves them on a draft release.
+# Builds all three installers and leaves them on a draft release.
 #
 # This exists because electron-builder only builds for the machine it runs on,
-# so a Windows laptop cannot produce the Mac dmg and a Mac cannot produce the
-# Windows exe. Until now that meant every release needed two computers, and it
-# showed: 0.3.2 shipped as an exe with no dmg beside it, so anyone on a Mac was
-# still on 0.3.1.
+# so a Windows laptop cannot produce the Mac dmg, a Mac cannot produce the
+# Windows exe, and neither can produce the Linux AppImage. Until now that meant
+# every release needed a machine of each kind, and it showed: 0.3.2 shipped as
+# an exe with no dmg beside it, so anyone on a Mac was still on 0.3.1.
 #
-# GitHub lends out both machines, so the two builds happen side by side and land
-# on the same release.
+# GitHub lends out all three, so the builds happen side by side and land on the
+# same release.
 #
 # The result is always a DRAFT. Nothing is public until a human reads it and
 # presses publish.
@@ -25,8 +25,8 @@ permissions:
 jobs:
   build:
     strategy:
-      # One platform failing must not cancel the other. Half a release is worth
-      # having; it is what every release before this one was.
+      # One platform failing must not cancel the others. A partial release is
+      # worth having; it is what every release before this one was.
       fail-fast: false
       matrix:
         include:
@@ -34,6 +34,8 @@ jobs:
             installer: Blab-*.dmg
           - os: windows-latest
             installer: Blab-Setup-*.exe
+          - os: ubuntu-latest
+            installer: Blab-*.AppImage
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

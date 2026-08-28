@@ -472,6 +472,10 @@ async function startRecording(): Promise<void> {
     );
     return;
   }
+  // From here the shell holds the machine awake and asks before any close
+  // throws the take away. Both stop again in the finally of stopRecording.
+  window.blab?.setRecording(true);
+
   const stream = recorder.mediaStream;
   if (stream) await meter.start(stream);
 
@@ -534,14 +538,17 @@ async function stopRecording(): Promise<void> {
   ui.record.textContent = 'Record';
   ui.record.classList.remove('is-recording');
 
-  const audio = await recorder.stop();
-  // Each line goes to disk with the moment it was typed in front of it, so the
-  // notes and the transcript end up on one time axis.
-  const notes = noteClock.render(ui.notes.value);
-  const title = ui.title.value.trim() || 'Untitled';
-
   let saved: { dir: string; handle: FileSystemDirectoryHandle } | null = null;
   try {
+    // Inside the try along with everything else. Left outside it, a recorder
+    // that refused to stop took the finally down with it and left Record
+    // disabled for good — the one failure that needs the button most.
+    const audio = await recorder.stop();
+    // Each line goes to disk with the moment it was typed in front of it, so
+    // the notes and the transcript end up on one time axis.
+    const notes = noteClock.render(ui.notes.value);
+    const title = ui.title.value.trim() || 'Untitled';
+
     if (!root) throw new Error('No folder connected.');
     saved = await createRecordingDir(root, title, new Date());
     await write(saved.handle, AUDIO, audio);
@@ -554,6 +561,9 @@ async function stopRecording(): Promise<void> {
   } catch (err) {
     say(`Could not save: ${(err as Error).message}`, true);
   } finally {
+    // Whatever happened above, nothing is recording now: the shell can let the
+    // machine sleep again and stop guarding the close button.
+    window.blab?.setRecording(false);
     ui.record.disabled = false;
     ui.title.disabled = false;
   }

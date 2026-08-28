@@ -32,5 +32,7 @@ interface Window {
     micStatus(): Promise<MicStatus>;
     requestMic(): Promise<boolean>;
     openMicSettings(): Promise<void>;
+    /** Fire and forget: the shell needs it, the page does not wait on it. */
+    setRecording(active: boolean): void;
   };
 }

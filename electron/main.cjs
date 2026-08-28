@@ -1,7 +1,18 @@
 // Blab as a desktop app. This file is the whole shell: it opens one window,
 // serves the built app to it, and says yes to the microphone. The app inside
 // is byte-for-byte the same one `npm run dev` serves.
-const { app, BrowserWindow, ipcMain, protocol, net, session, shell, systemPreferences } = require('electron');
+const {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  net,
+  powerSaveBlocker,
+  protocol,
+  session,
+  shell,
+  systemPreferences,
+} = require('electron');
 const path = require('node:path');
 const { readdir, stat } = require('node:fs/promises');
 const { pathToFileURL } = require('node:url');
@@ -127,6 +138,59 @@ function serveMicrophoneRequests() {
   });
 }
 
+// Between Record and Stop the talk exists in exactly one place: memory. Nothing
+// is written until Stop, so anything that takes the process down in between
+// takes the whole recording with it and leaves no file to recover from. Two
+// things do that without the person ever meaning to, and both are one keystroke.
+
+/** True from Record until Stop has finished writing. The renderer says so. */
+let recording = false;
+/** The id of our request to stay awake, or null when we are not asking. */
+let awake = null;
+
+function holdAwake(on) {
+  if (on && awake === null) {
+    // 'prevent-app-suspension', not the display variant. The screen may go
+    // dark — on a laptop recording a lecture it should. What must not happen
+    // is the process being suspended with the microphone open.
+    awake = powerSaveBlocker.start('prevent-app-suspension');
+  } else if (!on && awake !== null) {
+    powerSaveBlocker.stop(awake);
+    awake = null;
+  }
+}
+
+function setRecording(active) {
+  recording = Boolean(active);
+  holdAwake(recording);
+}
+
+function serveRecordingState() {
+  ipcMain.on('recording:state', (_event, active) => setRecording(active));
+}
+
+/**
+ * Resolves true only if the person has said they are willing to lose the take.
+ *
+ * The default button is the harmless one, so an absent-minded Return keeps the
+ * recording rather than throwing it away.
+ */
+async function confirmLosingTheRecording(win) {
+  const options = {
+    type: 'warning',
+    buttons: ['Keep recording', 'Discard it'],
+    defaultId: 0,
+    cancelId: 0,
+    message: 'Blab is still recording.',
+    detail:
+      'Nothing is written to disk until you press Stop, so closing now throws away everything since you pressed Record.',
+  };
+  const { response } = win
+    ? await dialog.showMessageBox(win, options)
+    : await dialog.showMessageBox(options);
+  return response === 1;
+}
+
 function allowLocalPermissions() {
   const ses = session.defaultSession;
   ses.setPermissionRequestHandler((_wc, permission, done) => done(ALLOWED.has(permission)));
@@ -159,6 +223,11 @@ function createWindow() {
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
+      // Blab spends most of its working life behind whatever the person is
+      // actually looking at. Chromium throttles timers in a window it thinks
+      // nobody can see, which would leave the clock and the meter lying about
+      // a recording that is still running.
+      backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -167,6 +236,27 @@ function createWindow() {
   });
 
   win.once('ready-to-show', () => win.show());
+
+  // A reload, or a crash and reload, leaves a fresh page with no recorder in
+  // it. Without this the flag would stay stuck on and every close from here on
+  // would ask about a recording that stopped existing.
+  win.webContents.on('did-finish-load', () => setRecording(false));
+
+  // On a Mac this is the one that matters. Cmd+W closes the window without
+  // quitting, which makes it the reflex for getting something out of the way
+  // rather than for being finished with it — and on a recording it costs the
+  // talk. Windows and Linux have no equivalent habit, but they lose the same
+  // audio, so the question is asked everywhere.
+  win.on('close', (event) => {
+    if (!recording) return;
+    event.preventDefault();
+    void confirmLosingTheRecording(win).then((discard) => {
+      if (!discard) return;
+      setRecording(false);
+      // destroy, not close: this handler must not get a second turn.
+      win.destroy();
+    });
+  });
   win.loadURL(DEV ? DEV_URL : 'blab://app/');
   if (DIAG) void diagnose(win);
 
@@ -267,6 +357,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     allowLocalPermissions();
     serveMicrophoneRequests();
+    serveRecordingState();
     if (!DEV) serveDist();
     createWindow();
     // The microphone is not asked for here. A prompt that arrives before the
@@ -275,6 +366,19 @@ if (!app.requestSingleInstanceLock()) {
     // the intent is obvious and the prompt makes sense.
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
+
+  // Quitting does not go through the window's close handler, so Cmd+Q and the
+  // dock's Quit need asking separately or they walk straight past it.
+  app.on('before-quit', (event) => {
+    if (!recording) return;
+    event.preventDefault();
+    const [win] = BrowserWindow.getAllWindows();
+    void confirmLosingTheRecording(win ?? null).then((discard) => {
+      if (!discard) return;
+      setRecording(false);
+      app.quit();
     });
   });
 

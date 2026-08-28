@@ -5,6 +5,7 @@ dist
 release
 Blab-Setup-*.exe
 Blab-*.dmg
+Blab-*.AppImage
 
 # Anyone's recordings, if they point Blab at a folder inside the checkout.
 # Audio and notes are the user's, and never the repository's.
