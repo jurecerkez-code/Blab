@@ -169,26 +169,38 @@ function serveRecordingState() {
   ipcMain.on('recording:state', (_event, active) => setRecording(active));
 }
 
+/** One question at a time: a held-down Cmd+R must not stack up dialogs. */
+let asking = false;
+
 /**
  * Resolves true only if the person has said they are willing to lose the take.
  *
  * The default button is the harmless one, so an absent-minded Return keeps the
- * recording rather than throwing it away.
+ * recording rather than throwing it away. A second call while the first is
+ * still open answers no rather than opening another.
  */
 async function confirmLosingTheRecording(win) {
+  if (asking) return false;
+  asking = true;
   const options = {
     type: 'warning',
     buttons: ['Keep recording', 'Discard it'],
     defaultId: 0,
     cancelId: 0,
     message: 'Blab is still recording.',
+    // Neutral about which key got us here: close, quit and reload all ask this
+    // same question, and all three lose exactly the same audio.
     detail:
-      'Nothing is written to disk until you press Stop, so closing now throws away everything since you pressed Record.',
+      'Nothing is written to disk until you press Stop, so everything since you pressed Record would be thrown away.',
   };
-  const { response } = win
-    ? await dialog.showMessageBox(win, options)
-    : await dialog.showMessageBox(options);
-  return response === 1;
+  try {
+    const { response } = win
+      ? await dialog.showMessageBox(win, options)
+      : await dialog.showMessageBox(options);
+    return response === 1;
+  } finally {
+    asking = false;
+  }
 }
 
 function allowLocalPermissions() {
@@ -241,6 +253,31 @@ function createWindow() {
   // it. Without this the flag would stay stuck on and every close from here on
   // would ask about a recording that stopped existing.
   win.webContents.on('did-finish-load', () => setRecording(false));
+
+  // Reload is the same loss by a different key. Blab never sets a menu, so it
+  // gets Electron's default one, and that has View -> Reload on Cmd+R with
+  // Force Reload on Cmd+Shift+R beside it. Both throw the page away, and the
+  // recording with it, and Cmd+R is close enough to Cmd+T and Cmd+E to be hit
+  // by accident.
+  //
+  // before-input-event is the hook for this: the documentation is explicit
+  // that preventing it also prevents the menu shortcut, which an ordinary
+  // keydown listener in the page could not do. Asking rather than silently
+  // swallowing the key, because a keystroke that does nothing at all is its
+  // own kind of broken — and the question explains what nearly happened.
+  win.webContents.on('before-input-event', (event, input) => {
+    if (!recording || input.type !== 'keyDown') return;
+    const key = (input.key || '').toLowerCase();
+    if (key !== 'r' && key !== 'f5') return;
+    if (key === 'r' && !input.meta && !input.control) return;
+
+    event.preventDefault();
+    void confirmLosingTheRecording(win).then((discard) => {
+      if (!discard) return;
+      setRecording(false);
+      win.webContents.reload();
+    });
+  });
 
   // On a Mac this is the one that matters. Cmd+W closes the window without
   // quitting, which makes it the reflex for getting something out of the way

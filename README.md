@@ -147,10 +147,10 @@ the wrong device looks exactly like a working one until you press Stop and read
 an empty transcript. If the bars are flat while you are talking, Blab cannot
 hear you. Fix it now rather than after the talk.
 
-Two things look after a recording while it runs. Closing the window or
-quitting asks first, rather than throwing away a talk that is not on disk yet —
-nothing is written until Stop, so on a Mac a habitual Cmd+W used to cost the
-lot. And the machine is asked to stay awake, so a lecture does not end early
+Two things look after a recording while it runs. Closing the window, quitting
+and reloading all ask first, rather than throwing away a talk that is not on
+disk yet — nothing is written until Stop, so on a Mac a habitual Cmd+W or Cmd+R
+used to cost the lot. And the machine is asked to stay awake, so a lecture does not end early
 because a laptop decided it was idle. The screen may still go dark; only sleep
 is held off.
 
