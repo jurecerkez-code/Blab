@@ -2,7 +2,7 @@
 // Pulls the Whisper model into public/models and the onnxruntime wasm binaries
 // into public/ort. After this, Blab never touches the network again.
 import { createWriteStream } from 'node:fs';
-import { copyFile, mkdir, readFile, stat } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, readFile, rm, stat } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { dirname, join, resolve } from 'node:path';
@@ -114,6 +114,32 @@ async function copyOrt() {
   return bytes;
 }
 
+/**
+ * Deletes any model that is not the one MODEL names.
+ *
+ * Swapping MODEL leaves the old weights sitting in public/models, and nothing
+ * downstream notices: electron-builder copies the whole folder, so the
+ * installer quietly grows by the size of a model nobody loads. Swapping
+ * whisper-base for whisper-base.en put 151 MB there where 75 belonged, and the
+ * README invites exactly this swap ("Want it faster? Change one line").
+ *
+ * Only ever removes things under public/models, which this script owns and can
+ * refetch — the folder is in .gitignore precisely because it is derived.
+ */
+async function dropOtherModels() {
+  const root = join(ROOT, 'public', 'models');
+  const keep = join(root, ...MODEL.split('/'));
+  for (const org of await readdir(root, { withFileTypes: true }).catch(() => [])) {
+    if (!org.isDirectory()) continue;
+    for (const name of await readdir(join(root, org.name), { withFileTypes: true }).catch(() => [])) {
+      const path = join(root, org.name, name.name);
+      if (!name.isDirectory() || path === keep) continue;
+      await rm(path, { recursive: true, force: true });
+      console.log(`  removed ${org.name}/${name.name} (not the model in use)`);
+    }
+  }
+}
+
 async function fetchModel() {
   const to = join(ROOT, 'public', 'models', ...MODEL.split('/'));
   let bytes = 0;
@@ -138,6 +164,7 @@ const ortBytes = await copyOrt();
 
 console.log(`\n${MODEL} -> public/models`);
 const modelBytes = await fetchModel();
+await dropOtherModels();
 
 console.log(
   `\nReady. ${mb(modelBytes)} of model, ${mb(ortBytes)} of runtime, all on disk.` +

@@ -313,12 +313,36 @@ function createWindow() {
   win.webContents.on('will-attach-webview', (event) => event.preventDefault());
 }
 
+/**
+ * The served path of the installed encoder weights, or null if there are none.
+ *
+ * Two levels down because models are stored the way HuggingFace names them,
+ * `org/model`, and which org and model those are is decided by one constant in
+ * src/worker.ts that is meant to be swapped.
+ */
+async function findEncoder(root) {
+  for (const org of await readdir(root).catch(() => [])) {
+    for (const model of await readdir(path.join(root, org)).catch(() => [])) {
+      const rel = `/models/${org}/${model}/onnx/encoder_model_quantized.onnx`;
+      if (await stat(path.join(root, org, model, 'onnx', 'encoder_model_quantized.onnx')).then(() => true).catch(() => false)) {
+        return rel;
+      }
+    }
+  }
+  return null;
+}
+
 async function diagnose(win) {
   await new Promise((done) => win.webContents.once('did-finish-load', done));
 
   // The worker chunk is content-hashed, so find it rather than hardcode it.
   const assets = await readdir(path.join(DIST, 'assets')).catch(() => []);
   const workerFile = assets.find((n) => /^worker-.*\.js$/.test(n));
+
+  // Likewise the model: this check used to name whisper-base outright, and
+  // swapping the MODEL constant left it reporting a missing file for a model
+  // that was sitting right there. Find whatever setup.mjs actually installed.
+  const encoder = await findEncoder(path.join(DIST, 'models'));
 
   const report = await win.webContents.executeJavaScript(`(async () => {
     const out = { threads: crossOriginIsolated, mic: null, model: null, whisper: null };
@@ -329,9 +353,11 @@ async function diagnose(win) {
       s.getTracks().forEach((t) => t.stop());
     } catch (e) { out.mic = 'FAILED: ' + e.name + ' ' + e.message; }
 
+    const encoder = ${JSON.stringify(encoder)};
     try {
-      const r = await fetch('/models/Xenova/whisper-base/onnx/encoder_model_quantized.onnx', { method: 'HEAD' });
-      out.model = r.ok ? 'ok: ' + r.headers.get('content-length') + ' bytes' : 'FAILED: HTTP ' + r.status;
+      if (!encoder) throw new Error('no model under dist/models — run npm run setup');
+      const r = await fetch(encoder, { method: 'HEAD' });
+      out.model = r.ok ? 'ok: ' + encoder + ', ' + r.headers.get('content-length') + ' bytes' : 'FAILED: HTTP ' + r.status;
     } catch (e) { out.model = 'FAILED: ' + e.message; }
 
     // Two seconds of silence through the real worker. Slow, but it exercises
@@ -381,6 +407,14 @@ async function diagnose(win) {
 }
 
 if (!app.requestSingleInstanceLock()) {
+  // Handing focus to the copy that is already open is right for a normal
+  // launch, and wrong for --diagnose: the checks never run, nothing is printed,
+  // and the exit code says 0, which reads as "everything passed". A diagnostic
+  // that reports success without testing anything is worse than none.
+  if (DIAG) {
+    console.error('Blab is already running. Quit it first — --diagnose needs the app to itself.');
+    app.exit(2);
+  }
   app.quit();
 } else {
   app.on('second-instance', () => {
