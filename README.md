@@ -263,17 +263,19 @@ That is a setting whose wrong value destroys the recording, offered to someone
 who has just finished a lecture and is not thinking about settings. The author
 of this app walked into it. So it is gone.
 
-What replaced it is worth more than it cost. The model is now
-`whisper-base.en`, trained on English alone rather than on ninety-nine
-languages, and its two weight files are **the same 73 MB, to the byte**, as the
-multilingual ones they replaced — identical parameter count, all of it spent on
-the language you are actually speaking. Removing Croatian made English
-transcription better and the download no larger.
+The obvious follow-on was to swap in `whisper-base.en`, which is trained on
+English alone rather than on ninety-nine languages and is the same 73 MB to the
+byte. That was tried and rejected. Put through five sentences against the
+multilingual model it tied on three, both got one wrong, and it lost the fifth:
+"rear delt" came back as "rear dealt" where the multilingual model spelled it
+correctly. Published benchmarks favour the `.en` tiers on English; this
+vocabulary did not, and a measurement on the words you actually say beats a
+benchmark on words you do not. So the model is unchanged — only the picker is
+gone, and English is pinned in code.
 
 Croatian genuinely worked and this is a real loss for anyone who used it. The
-way back is one line — `MODEL` in `src/worker.ts` set to `Xenova/whisper-base`,
-then `npm run setup` — plus restoring the picker. Both are in the git history at
-v0.5.0.
+model still knows it, so the way back is restoring the picker and passing the
+language through. It is in the git history at v0.5.0.
 
 ## When the room beats the microphone
 
@@ -350,13 +352,14 @@ minutes. It runs in the background, so you can start recording the next talk
 while the last one is still going.
 
 Want it faster? Change one line. `MODEL` at the top of `src/worker.ts`, set it
-to `Xenova/whisper-tiny.en`, run `npm run setup` again. Tiny is about 3x faster
+to `Xenova/whisper-tiny`, run `npm run setup` again. Tiny is about 3x faster
 and noticeably worse.
 
-Want it more accurate? Same line, `Xenova/whisper-small.en`. Several times
-bigger and slower, and the installer grows with it, so it is a real trade
-rather than free. Drop the `.en` from either name and you get the multilingual
-tier instead, which is the road back to Croatian.
+Want it more accurate? Same line, `Xenova/whisper-small`. Several times bigger
+and slower, and the installer grows with it, so it is a real trade rather than
+free. Adding `.en` to either name gets the English-only tier, which is worth
+measuring on your own vocabulary rather than assuming — it was measured here
+and lost.
 
 `npm run setup` deletes whichever model you are no longer using. Without that,
 swapping a model leaves the old weights in `public/models`, electron-builder
@@ -408,8 +411,8 @@ no dmg beside it, leaving everyone on a Mac a version behind. So pushing a tag
 now builds all three:
 
 ```
-git tag v0.5.0
-git push origin v0.5.0
+git tag v0.6.0
+git push origin v0.6.0
 ```
 
 GitHub lends out a Windows machine, a Mac and a Linux box, runs the same

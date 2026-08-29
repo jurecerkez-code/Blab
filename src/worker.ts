@@ -9,15 +9,21 @@ import {
 import { fromChunks } from './timeline';
 
 /**
- * The English-only tier. Same two files and the same 73 MB as the multilingual
- * `whisper-base` it replaced, because the parameter count is identical — but a
- * model that spent all of it on one language is better at that language than
- * one that spread it across ninety-nine. Blab is English-only, so there is no
- * reason to carry the other ninety-eight.
+ * Multilingual base, even though Blab only writes English.
  *
- * Swap for 'Xenova/whisper-tiny.en' if base is too slow on your laptop.
+ * `whisper-base.en` is the obvious swap here — same parameter count, same
+ * 73 MB, all of it spent on one language — and it was tried. On five sentences
+ * put through both, it tied on three, both got one wrong, and it lost the
+ * fifth: "rear delt" came back as "rear dealt" where the multilingual model
+ * wrote it correctly. Aggregate benchmarks favour the .en tiers; this
+ * vocabulary did not, so the measurement wins over the benchmark.
+ *
+ * Staying here also keeps the mirror in scripts/setup.mjs working, which only
+ * holds a copy of this model.
+ *
+ * Swap for 'Xenova/whisper-tiny' if base is too slow on your laptop.
  */
-const MODEL = 'Xenova/whisper-base.en';
+const MODEL = 'Xenova/whisper-base';
 const CHUNK_S = 30;
 const STRIDE_S = 5;
 /** Longest run of tokens allowed to repeat before generation is forced to move on. */
@@ -183,11 +189,17 @@ self.addEventListener('message', async (event: MessageEvent<ToWorker>) => {
       // middle of it and stops looking like a repeat. Loops inside a segment —
       // which is nearly all of them — are still cut at the second repetition.
       return_timestamps: true,
-      // No `language` and no `task` here, and that is required rather than an
-      // omission: an English-only model has no language or translate tokens at
-      // all, and transformers.js rejects both options outright with "Cannot
-      // specify `language` ... for an English-only model". English is not
-      // selected, it is the only thing the weights can do.
+      // Whisper can transcribe or translate, and left to itself it sometimes
+      // picks translate. Blab always wants the words that were actually said,
+      // so this is pinned.
+      task: 'transcribe',
+      // Pinned in code rather than chosen in the UI. The picker that used to
+      // set this is gone: the language cannot be detected, so it had to be
+      // named by hand, and naming it wrong did not degrade a transcript — it
+      // destroyed it. Leaving this out is not "detect it" either; transformers
+      // .js has no detection and quietly assumes English, so saying English is
+      // the same behaviour said out loud.
+      language: 'en',
       // Whisper gets stuck. On a quiet room, or noise that sounds vaguely like
       // speech, it will latch onto a phrase and repeat it hundreds of times —
       // one recording here lost 434 words in a row to "like a city". Forbidding
