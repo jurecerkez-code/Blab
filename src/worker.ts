@@ -8,22 +8,26 @@ import {
 } from '@huggingface/transformers';
 import { fromChunks } from './timeline';
 
-/** Swap for 'Xenova/whisper-tiny' if base is too slow on your laptop. */
-const MODEL = 'Xenova/whisper-base';
+/**
+ * The English-only tier. Same two files and the same 73 MB as the multilingual
+ * `whisper-base` it replaced, because the parameter count is identical — but a
+ * model that spent all of it on one language is better at that language than
+ * one that spread it across ninety-nine. Blab is English-only, so there is no
+ * reason to carry the other ninety-eight.
+ *
+ * Swap for 'Xenova/whisper-tiny.en' if base is too slow on your laptop.
+ */
+const MODEL = 'Xenova/whisper-base.en';
 const CHUNK_S = 30;
 const STRIDE_S = 5;
 /** Longest run of tokens allowed to repeat before generation is forced to move on. */
 const NO_REPEAT_WORDS = 6;
 const SAMPLE_RATE = 16000;
 
-/** A Whisper language code. Always a real language — never "let it decide". */
-export type Language = 'en' | 'hr';
-
 export type ToWorker = {
   type: 'transcribe';
   id: string;
   audio: Float32Array;
-  language: Language;
   modelPath: string;
   ortPath: string;
 };
@@ -34,7 +38,7 @@ export type Segment = { at: number; text: string };
 export type FromWorker =
   | { type: 'loading' }
   | { type: 'progress'; id: string; done: number; total: number }
-  | { type: 'done'; id: string; text: string; segments: Segment[] }
+  | { type: 'done'; id: string; text: string; segments: Segment[]; degenerate: boolean }
   | { type: 'failed'; id: string; message: string; modelMissing: boolean };
 
 const post = (msg: FromWorker) => self.postMessage(msg);
@@ -80,9 +84,12 @@ function load(modelPath: string, ortPath: string) {
   const wasm = env.backends.onnx.wasm!;
   wasm.wasmPaths = ortPath;
   wasm.proxy = false; // already off the main thread
-  wasm.numThreads = self.crossOriginIsolated
-    ? Math.min(4, navigator.hardwareConcurrency || 2)
-    : 1;
+  // Every core the machine will admit to. The old cap of four was picked
+  // before anything was measured and left half of an eight core laptop idle;
+  // onnxruntime is the only heavy thing running, so there is nothing to save
+  // the rest for. Without cross-origin isolation there are no threads to hand
+  // out at all, hence the 1 — see the COOP/COEP headers in electron/main.cjs.
+  wasm.numThreads = self.crossOriginIsolated ? navigator.hardwareConcurrency || 2 : 1;
 
   return pipeline('automatic-speech-recognition', MODEL, { device: 'wasm', dtype: 'q8' });
 }
@@ -111,9 +118,42 @@ class ChunkCounter extends BaseStreamer {
   }
 }
 
+/**
+ * Above this, a transcript is repetition rather than speech.
+ *
+ * Real Whisper decides this the same way and re-runs the chunk at a higher
+ * temperature when it trips. transformers.js implements none of that — there is
+ * no compression_ratio_threshold, no logprob_threshold, no temperature fallback
+ * anywhere in the bundle — so Blab cannot re-decode. What it can do is notice,
+ * and say so, which is the difference between a file you throw away and a file
+ * you do not know to throw away.
+ *
+ * Ordinary English gzips to about 1.5-2.0 here. The looped recording that
+ * prompted this measured 3.15.
+ */
+const LOOP_RATIO = 2.4;
+
+/** Gzip via the platform: no dependency, and the same metric Whisper uses. */
+async function looping(text: string): Promise<boolean> {
+  // Short transcripts compress badly for boring reasons — there is no room for
+  // a dictionary to pay for itself — so the ratio means nothing down there.
+  if (text.length < 200) return false;
+  try {
+    const raw = new TextEncoder().encode(text);
+    const gz = new Response(
+      new Blob([raw]).stream().pipeThrough(new CompressionStream('gzip')),
+    );
+    const packed = (await gz.arrayBuffer()).byteLength;
+    return raw.byteLength / packed > LOOP_RATIO;
+  } catch {
+    // A missing CompressionStream must never cost someone their transcript.
+    return false;
+  }
+}
+
 self.addEventListener('message', async (event: MessageEvent<ToWorker>) => {
   if (event.data.type !== 'transcribe') return;
-  const { id, audio, language, modelPath, ortPath } = event.data;
+  const { id, audio, modelPath, ortPath } = event.data;
   let ready = false;
 
   try {
@@ -143,14 +183,11 @@ self.addEventListener('message', async (event: MessageEvent<ToWorker>) => {
       // middle of it and stops looking like a repeat. Loops inside a segment —
       // which is nearly all of them — are still cut at the second repetition.
       return_timestamps: true,
-      // Whisper can transcribe or translate, and left to itself it sometimes
-      // picks translate. Blab always wants the words that were actually said,
-      // in the language they were said in, so this is pinned.
-      task: 'transcribe',
-      // Always a named language. Leaving this out does not mean "detect it" —
-      // transformers.js has no detection yet and quietly assumes English, which
-      // is the bug that made Croatian come back in English in the first place.
-      language,
+      // No `language` and no `task` here, and that is required rather than an
+      // omission: an English-only model has no language or translate tokens at
+      // all, and transformers.js rejects both options outright with "Cannot
+      // specify `language` ... for an English-only model". English is not
+      // selected, it is the only thing the weights can do.
       // Whisper gets stuck. On a quiet room, or noise that sounds vaguely like
       // speech, it will latch onto a phrase and repeat it hundreds of times —
       // one recording here lost 434 words in a row to "like a city". Forbidding
@@ -158,6 +195,15 @@ self.addEventListener('message', async (event: MessageEvent<ToWorker>) => {
       // repetition. Real speech does not repeat six words verbatim back to
       // back, so nothing genuine is lost.
       no_repeat_ngram_size: NO_REPEAT_WORDS,
+      // The n-gram rule above only forbids an *exact* six word repeat, and a
+      // real loop walks straight around it. One recording came back as
+      // hundreds of "ti ki pi si" in every order: four tokens rearranged give
+      // thousands of technically distinct six-grams, none of them a repeat.
+      // This penalises a token for having been used at all, so a rotation
+      // through a tiny vocabulary decays instead of running forever. Kept mild
+      // — real speech reuses common words constantly and a heavy hand here
+      // starts rewriting honest sentences.
+      repetition_penalty: 1.15,
       // Typed as TextStreamer upstream, but generate() only ever calls
       // put()/end() — the BaseStreamer contract this implements.
       streamer: new ChunkCounter(id, total) as unknown as TextStreamer,
@@ -168,7 +214,7 @@ self.addEventListener('message', async (event: MessageEvent<ToWorker>) => {
       .map((r) => r.text)
       .join(' ')
       .trim();
-    post({ type: 'done', id, text, segments: fromChunks(parts) });
+    post({ type: 'done', id, text, segments: fromChunks(parts), degenerate: await looping(text) });
   } catch (err) {
     // A failed load must not be cached, or every later attempt fails too. A
     // model that loaded fine and then hit a bad clip is worth keeping — it

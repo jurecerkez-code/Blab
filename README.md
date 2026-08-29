@@ -249,26 +249,31 @@ billion parameter model is the same thing as a good one.
 
 ## What language it writes in
 
-There is a picker in the top corner: **English** or **Croatian**.
+English. Only English, and there is no picker to get wrong.
 
-Blab transcribes. It never translates. Speak Croatian with Croatian selected
-and you get Croatian words back, not an English paraphrase of them. The model
-that ships with Blab is multilingual, so this costs no extra download.
+Until 0.5.0 there was one, offering English or Croatian, and it was a trap. The
+language could not be detected — the library has no detection — so it had to be
+pinned by hand, and picking the wrong one does not give you a worse transcript.
+It gives you wreckage. A test recording made in English with Croatian still
+selected came back as a real first sentence followed by two thousand words of
+"ti ti ki ki pi ti". Whisper, ordered to produce Croatian tokens from English
+audio, has no honest path and takes a dishonest one.
 
-There is no Auto, on purpose. Whisper can detect the spoken language, but the
-library Blab uses has not implemented detection yet — it quietly assumes
-English. An Auto option would therefore be a lie: pick it, speak Croatian, get
-English. Better to have two honest choices than three where one misleads.
+That is a setting whose wrong value destroys the recording, offered to someone
+who has just finished a lecture and is not thinking about settings. The author
+of this app walked into it. So it is gone.
 
-Your choice is remembered, the same way your folder is. Set it once.
+What replaced it is worth more than it cost. The model is now
+`whisper-base.en`, trained on English alone rather than on ninety-nine
+languages, and its two weight files are **the same 73 MB, to the byte**, as the
+multilingual ones they replaced — identical parameter count, all of it spent on
+the language you are actually speaking. Removing Croatian made English
+transcription better and the download no larger.
 
-Accuracy in Croatian is noticeably below English. The model that ships is the
-`base` tier, and Croatian is far less represented in its training, so it can
-break words in odd places. See below for swapping in a larger model.
-
-Only English and Croatian are listed because those are the two that have been
-used in anger. The model knows 99 languages; adding one is a single line in
-`index.html`.
+Croatian genuinely worked and this is a real loss for anyone who used it. The
+way back is one line — `MODEL` in `src/worker.ts` set to `Xenova/whisper-base`,
+then `npm run setup` — plus restoring the picker. Both are in the git history at
+v0.5.0.
 
 ## When the room beats the microphone
 
@@ -277,21 +282,50 @@ hears a room, not a speaker, and then it guesses.
 
 Its way of guessing is repetition: it fastens onto a phrase and repeats it.
 One talk recorded here came back with a single phrase repeated 434 times, and
-39% of the whole transcript inside loops like that. Blab now forbids any six
-word run from repeating, which cuts a loop off at its second repetition, so a
-poor recording gives you a short honest transcript instead of a long worthless
-one. It is also faster, because generating hundreds of repeated words was
-costing real time.
+39% of the whole transcript inside loops like that.
+
+Blab pushes back on this in three places, and it is worth being straight about
+how far that gets, because an earlier version of this file promised more than
+the code delivered.
+
+The first is a ban on any six word run repeating, which does cut the *434 times
+the same phrase* kind of loop off at its second repetition. What it does not
+catch is a loop that keeps moving: four tokens rotating through each other give
+thousands of arrangements, none of them an exact repeat, and one recording here
+walked straight around the rule for two thousand words. So the second is a
+repetition penalty, which discourages a token for having been used at all
+rather than for appearing in a particular order, and makes that rotation decay.
+
+Neither is a guarantee, so the third is to check the result and say so. Real
+Whisper measures how well a transcript compresses — looping text compresses far
+too well — and re-decodes when it looks wrong. The library here implements none
+of that, so Blab cannot re-decode; it can only measure. Above a gzip ratio of
+2.4, where ordinary speech sits between 1.5 and 2.0, the transcript is still
+saved and the app tells you plainly that Whisper got stuck rather than leaving
+you to discover it at the bottom of the file. The recording that prompted this
+scored 3.15.
 
 What it cannot do is invent the words the microphone never caught. The same
 talk holds 60 words per minute of real speech where a well captured one holds
 170. No setting recovers the rest.
 
-So the fix is physical. Get within two or three metres of whoever is speaking,
-or put any external microphone closer — even earbuds on the table beat a laptop
-across the room. And do not trust loud bars alone: the microphone's automatic
-gain will happily raise a quiet room until the meter looks healthy while it is
-mostly amplifying air conditioning.
+So the fix is mostly physical. Get within two or three metres of whoever is
+speaking, or put any external microphone closer — even earbuds on the table beat
+a laptop across the room.
+
+One part of it was not physical, and it was Blab's own fault. The microphone was
+opened with `audio: true`, which takes the browser's defaults, and those
+defaults are tuned for a voice call: echo cancellation, noise suppression and
+automatic gain, all on. The last is the one this section used to warn you about
+— it lifts a quiet room until the meter looks healthy while mostly amplifying
+the air conditioning — and Blab was switching it on itself while telling you to
+watch out for it.
+
+Noise suppression is worse. It works by gating short broadband sounds, and the
+release of a consonant is a short broadband sound, so it files the front off
+words. "Rear delt" came back here as "rear aelt": Whisper only invents a
+non-word when what it was handed has genuinely lost something. All three are now
+off, and the microphone reaches Whisper the way Whisper was trained to hear it.
 
 ## How long can a talk be
 
@@ -316,14 +350,18 @@ minutes. It runs in the background, so you can start recording the next talk
 while the last one is still going.
 
 Want it faster? Change one line. `MODEL` at the top of `src/worker.ts`, set it
-to `Xenova/whisper-tiny`, run `npm run setup` again. Tiny is about 3x faster
+to `Xenova/whisper-tiny.en`, run `npm run setup` again. Tiny is about 3x faster
 and noticeably worse.
 
-Want it more accurate? Same line, `Xenova/whisper-small`. It is the better
-trade if you record in anything other than English — Whisper's smaller tiers
-learned far less of every other language, and Croatian in particular comes back
-with words broken in odd places. Small is several times bigger and slower, and
-the installer grows with it, so it is a real trade rather than free.
+Want it more accurate? Same line, `Xenova/whisper-small.en`. Several times
+bigger and slower, and the installer grows with it, so it is a real trade
+rather than free. Drop the `.en` from either name and you get the multilingual
+tier instead, which is the road back to Croatian.
+
+`npm run setup` deletes whichever model you are no longer using. Without that,
+swapping a model leaves the old weights in `public/models`, electron-builder
+copies the whole folder, and the installer silently grows by the size of a model
+nothing loads.
 
 ## Does it phone home
 
@@ -467,7 +505,7 @@ src/
   timeline.ts     the [mm:ss] prefix, written and read back
   notes.ts        when each line of your notes was typed
   highlights.ts   the shortlist, picked with arithmetic and no model
-  store.ts        remembers your folder and your language
+  store.ts        remembers your folder
 scripts/
   setup.mjs       fetches the model, once, while you build
   icon.mjs        renders the app icon
@@ -484,11 +522,9 @@ The meter watches the stream the recorder already opened rather than asking for
 the microphone a second time. A second request would prompt macOS all over
 again and hold a second device open for nothing.
 
-Browser storage holds exactly two things: the handle for your folder, and which
-transcription language you picked. Folder handles cannot go into localStorage,
-which is why there is a database at all; the language rides along in the same
-place rather than inventing a second way to remember things. Nothing about your
-recordings is kept in the app.
+Browser storage holds exactly one thing: the handle for your folder. Folder
+handles cannot go into localStorage, which is why there is a database at all.
+Nothing about your recordings is kept in the app.
 
 ## Contributing
 

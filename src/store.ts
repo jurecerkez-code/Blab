@@ -1,12 +1,13 @@
 // What IndexedDB is used for: remembering the choices that should outlive a
 // restart. The folder is the reason it exists at all — directory handles cannot
-// be stringified, so localStorage is out. The transcription language rides
-// along in the same store rather than opening a second way of remembering
-// things. Two keys, no schema.
+// be stringified, so localStorage is out. One key, no schema.
+//
+// A 'language' key also sits in this store on anyone who ran 0.3.1 to 0.5.0.
+// Nothing reads it any more and it is a few bytes, so it is left where it is
+// rather than shipping a migration to delete it.
 const DB_NAME = 'blab';
 const STORE = 'handles';
 const ROOT_KEY = 'root';
-const LANGUAGE_KEY = 'language';
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -34,12 +35,4 @@ export function rememberRoot(handle: FileSystemDirectoryHandle): Promise<unknown
 
 export function recallRoot(): Promise<FileSystemDirectoryHandle | undefined> {
   return tx('readonly', (s) => s.get(ROOT_KEY));
-}
-
-export function rememberLanguage(code: string): Promise<unknown> {
-  return tx('readwrite', (s) => s.put(code, LANGUAGE_KEY));
-}
-
-export function recallLanguage(): Promise<string | undefined> {
-  return tx('readonly', (s) => s.get(LANGUAGE_KEY));
 }

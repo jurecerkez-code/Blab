@@ -25,7 +25,33 @@ export class Recorder {
 
   /** Throws if the browser or the user refuses the mic. */
   async start(): Promise<void> {
-    this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    this.stream = await navigator.mediaDevices.getUserMedia({
+      // `audio: true` would take Chromium's defaults, and its defaults are
+      // tuned for a voice call: keep a human on the other end comfortable,
+      // throw away everything else. Whisper is not a human on the other end.
+      //
+      // Noise suppression is the one that hurts. It works by gating short
+      // broadband transients, and the release of a /d/ or a /t/ *is* a short
+      // broadband transient — so it files the front off consonants. "Rear delt"
+      // came back as "rear aelt" here, and Whisper only invents a non-word when
+      // the sound it was given has genuinely lost something.
+      //
+      // Automatic gain is the one the README already complains about: it lifts a
+      // quiet room until the meter looks healthy while mostly amplifying the air
+      // conditioning. Echo cancellation is looking for a far-end signal that
+      // does not exist when nobody is on a call.
+      //
+      // Whisper was trained on audio off the open web, which has had none of
+      // this done to it. Hand it the microphone as it comes.
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        // Whisper works in mono and everything downstream mixes to it anyway.
+        // Asking here means one channel is recorded rather than two thrown away.
+        channelCount: 1,
+      },
+    });
     this.chunks = [];
     const mimeType = pickMime();
     this.recorder = new MediaRecorder(this.stream, mimeType ? { mimeType } : undefined);

@@ -4,9 +4,9 @@ import { type Scored, highlights, sentences } from './highlights';
 import { Meter } from './meter';
 import { NoteClock } from './notes';
 import { Recorder, formatDuration } from './recorder';
-import { recallLanguage, recallRoot, rememberLanguage, rememberRoot } from './store';
+import { recallRoot, rememberRoot } from './store';
 import { type Line, parse, render, stamp } from './timeline';
-import { ModelMissingError, Transcriber, type Language } from './transcriber';
+import { ModelMissingError, Transcriber } from './transcriber';
 import {
   AUDIO,
   NOTES,
@@ -30,7 +30,6 @@ const ui = {
   setupPick: $<HTMLButtonElement>('setup-pick'),
   pickFolder: $<HTMLButtonElement>('pick-folder'),
   folderName: $('folder-name'),
-  language: $<HTMLSelectElement>('language'),
   recorder: $('recorder'),
   title: $<HTMLInputElement>('title'),
   record: $<HTMLButtonElement>('record'),
@@ -581,9 +580,7 @@ async function transcribeInto(dir: FileSystemDirectoryHandle, name: string): Pro
     say('Reading the audio…');
     const samples = await decodeForWhisper(audio);
 
-    // Read at the moment of transcribing, not when the recording started, so
-    // switching the picker and pressing Transcribe again does what it looks like.
-    const result = await transcriber.transcribe(samples, ui.language.value as Language, (p) => {
+    const result = await transcriber.transcribe(samples, (p) => {
       if (p.stage === 'loading') return say('Starting Whisper on this machine…');
       say(
         p.total > 1
@@ -601,7 +598,20 @@ async function transcribeInto(dir: FileSystemDirectoryHandle, name: string): Pro
     // cannot click beats a talk that is missing its last two minutes.
     const timed = render(result.segments);
     await write(dir, TRANSCRIPT, keptEverything(timed, result.text) ? timed : result.text);
-    say(`Transcript saved to ${name}/${TRANSCRIPT}.`);
+    // Saved either way. A transcript that is mostly Whisper talking to itself is
+    // still the only record of that talk, and deleting it would be the app
+    // deciding something it cannot know. Saying so is the whole fix: the failure
+    // used to be invisible until someone read two thousand words of "ti ki pi".
+    if (result.degenerate) {
+      say(
+        `Saved to ${name}/${TRANSCRIPT}, but it looks like Whisper got stuck repeating ` +
+          'itself rather than transcribing. That means it could not hear speech clearly — ' +
+          'get the microphone closer and record again.',
+        true,
+      );
+    } else {
+      say(`Transcript saved to ${name}/${TRANSCRIPT}.`);
+    }
     await reopenIfShowing(name);
   } catch (err) {
     if (err instanceof ModelMissingError) {
@@ -666,21 +676,10 @@ ui.notes.addEventListener('input', () => {
   if (!recorder.active) return;
   noteClock.mark(ui.notes.value, ui.notes.selectionStart ?? ui.notes.value.length, recordedMs());
 });
-ui.language.addEventListener('change', () => void rememberLanguage(ui.language.value));
 ui.pickFolder.addEventListener('click', () => void choose());
 ui.setupPick.addEventListener('click', () => void setupPickClicked());
 
 async function boot(): Promise<void> {
-  // First, and before any of the early returns below: the picker must show the
-  // remembered language whichever way the rest of boot goes.
-  const language = await recallLanguage();
-  // Anyone upgrading from 0.3.0 has 'auto' saved, and that option is gone. It
-  // matches nothing here, so the picker keeps its default of English — which is
-  // exactly what 'auto' did anyway. Without this check it would show blank.
-  if (language && [...ui.language.options].some((o) => o.value === language)) {
-    ui.language.value = language;
-  }
-
   if (!('showDirectoryPicker' in window)) {
     ui.setup.classList.remove('hidden');
     ui.setupPick.disabled = true;

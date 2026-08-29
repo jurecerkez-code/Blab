@@ -1,12 +1,12 @@
-import type { FromWorker, Language, Segment, ToWorker } from './worker';
+import type { FromWorker, Segment, ToWorker } from './worker';
 
-export type { Language, Segment };
+export type { Segment };
 
 /**
  * The words, and where each phrase sits in the audio. `segments` is empty only
  * if Whisper returned no timestamps at all; `text` is always the whole thing.
  */
-export type Transcript = { text: string; segments: Segment[] };
+export type Transcript = { text: string; segments: Segment[]; degenerate: boolean };
 
 export type Progress =
   | { stage: 'loading' }
@@ -34,21 +34,13 @@ export class Transcriber {
    * copied, so the array is detached and unusable once this is called. An hour
    * of audio is ~230 MB, which is worth not duplicating.
    */
-  transcribe(
-    audio: Float32Array,
-    language: Language,
-    onProgress: (p: Progress) => void,
-  ): Promise<Transcript> {
-    const run = this.queue.then(() => this.send(audio, language, onProgress));
+  transcribe(audio: Float32Array, onProgress: (p: Progress) => void): Promise<Transcript> {
+    const run = this.queue.then(() => this.send(audio, onProgress));
     this.queue = run.catch(() => {});
     return run;
   }
 
-  private send(
-    audio: Float32Array,
-    language: Language,
-    onProgress: (p: Progress) => void,
-  ): Promise<Transcript> {
+  private send(audio: Float32Array, onProgress: (p: Progress) => void): Promise<Transcript> {
     const id = String(++this.jobs);
     const worker = this.spawn();
 
@@ -63,7 +55,7 @@ export class Transcriber {
             return onProgress({ stage: 'working', done: msg.done, total: msg.total });
           case 'done':
             worker.removeEventListener('message', listener);
-            return resolve({ text: msg.text, segments: msg.segments });
+            return resolve({ text: msg.text, segments: msg.segments, degenerate: msg.degenerate });
           case 'failed':
             worker.removeEventListener('message', listener);
             return reject(
@@ -77,7 +69,6 @@ export class Transcriber {
         type: 'transcribe',
         id,
         audio,
-        language,
         modelPath: abs('models/'),
         ortPath: abs('ort/'),
       };
