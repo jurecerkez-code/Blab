@@ -34,5 +34,7 @@ interface Window {
     openMicSettings(): Promise<void>;
     /** Fire and forget: the shell needs it, the page does not wait on it. */
     setRecording(active: boolean): void;
+    /** Absolute path of the git repository the named folder is in, or null. */
+    gitRoot(folderName: string): Promise<string | null>;
   };
 }

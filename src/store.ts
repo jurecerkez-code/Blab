@@ -33,6 +33,11 @@ export function rememberRoot(handle: FileSystemDirectoryHandle): Promise<unknown
   return tx('readwrite', (s) => s.put(handle, ROOT_KEY));
 }
 
+/** For a remembered folder that turns out never to be usable again. */
+export function forgetRoot(): Promise<unknown> {
+  return tx('readwrite', (s) => s.delete(ROOT_KEY));
+}
+
 export function recallRoot(): Promise<FileSystemDirectoryHandle | undefined> {
   return tx('readonly', (s) => s.get(ROOT_KEY));
 }

@@ -169,6 +169,68 @@ function serveRecordingState() {
   ipcMain.on('recording:state', (_event, active) => setRecording(active));
 }
 
+// ---------------------------------------------------------------- the vault
+
+/**
+ * Where the File System Access API last granted a folder, as a real path.
+ *
+ * Recordings are made on a laptop and stay on it. The one way they have ever
+ * escaped that is a folder inside a git checkout, so Blab refuses those — and
+ * refusing them means knowing where a folder is, which the page cannot work out
+ * for itself. A directory handle has no path and no way to reach its parent, so
+ * the check in vault.ts can only look inside the folder it was given: it
+ * catches someone picking the top of a checkout and misses someone picking a
+ * notes folder two levels down inside one. Same working tree, same risk.
+ *
+ * Nor can the page be handed a path by writing a file and asking where it went:
+ * a File from FileSystemFileHandle.getFile has an empty path in Electron, and
+ * the request to change that (electron#33647) is closed as not planned.
+ *
+ * The permission handlers are the way through. Chromium routes every grant of a
+ * folder past them with the path attached, which is the one moment the two
+ * halves of that folder — the handle the page holds and the location on disk —
+ * are both in view. It costs nothing: those handlers already run.
+ */
+let granted = null;
+
+function rememberGrant(details) {
+  if (details?.isDirectory && typeof details.filePath === 'string' && details.filePath) {
+    granted = details.filePath;
+  }
+}
+
+/**
+ * The repository root at or above the folder just granted, or null.
+ *
+ * `folderName` is what the page believes it is holding. A grant is remembered
+ * until the next one replaces it, so this refuses to answer when the two have
+ * drifted apart rather than describing the wrong folder — silence degrades to
+ * the check vault.ts can make on its own, a wrong answer does not.
+ *
+ * `.git` is a directory in an ordinary clone and a file in a worktree or a
+ * submodule, so this asks whether the name exists rather than what it is.
+ */
+async function gitRootFor(folderName) {
+  if (!granted || path.basename(granted) !== String(folderName)) return null;
+  let dir = granted;
+  for (;;) {
+    try {
+      await stat(path.join(dir, '.git'));
+      return dir;
+    } catch {
+      // Not here. Keep climbing.
+    }
+    const up = path.dirname(dir);
+    // path.dirname('/') is '/', and the same at the root of a Windows drive.
+    if (up === dir) return null;
+    dir = up;
+  }
+}
+
+function serveVaultChecks() {
+  ipcMain.handle('vault:git-root', (_event, folderName) => gitRootFor(folderName));
+}
+
 /** One question at a time: a held-down Cmd+R must not stack up dialogs. */
 let asking = false;
 
@@ -205,8 +267,16 @@ async function confirmLosingTheRecording(win) {
 
 function allowLocalPermissions() {
   const ses = session.defaultSession;
-  ses.setPermissionRequestHandler((_wc, permission, done) => done(ALLOWED.has(permission)));
-  ses.setPermissionCheckHandler((_wc, permission) => ALLOWED.has(permission));
+  // The details carry the path of any folder being granted, which is the only
+  // place Blab can learn where the page's directory handle actually is.
+  ses.setPermissionRequestHandler((_wc, permission, done, details) => {
+    rememberGrant(details);
+    done(ALLOWED.has(permission));
+  });
+  ses.setPermissionCheckHandler((_wc, permission, _origin, details) => {
+    rememberGrant(details);
+    return ALLOWED.has(permission);
+  });
   // Blab talks to no USB, HID or serial device. Saying no to all of them costs
   // nothing and removes the whole class of question.
   ses.setDevicePermissionHandler(() => false);
@@ -429,6 +499,7 @@ if (!app.requestSingleInstanceLock()) {
     allowLocalPermissions();
     serveMicrophoneRequests();
     serveRecordingState();
+    serveVaultChecks();
     if (!DEV) serveDist();
     createWindow();
     // The microphone is not asked for here. A prompt that arrives before the
