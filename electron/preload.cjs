@@ -1,4 +1,4 @@
-// The only bridge between the page and the machine. Three of the four things
+// The only bridge between the page and the machine. Three of the five things
 // it carries are about the microphone. macOS will not let an app grant itself
 // access — only the person sitting there can — so the most an app can do is
 // ask at the right moment and, if the answer was already no, open the exact
@@ -19,4 +19,10 @@ contextBridge.exposeInMainWorld('blab', {
    * throws the take away.
    */
   setRecording: (active) => ipcRenderer.send('recording:state', active),
+
+  /**
+   * The git repository the named folder sits in, or null. The shell saw where
+   * that folder is when access to it was granted; the page never can.
+   */
+  gitRoot: (folderName) => ipcRenderer.invoke('vault:git-root', folderName),
 });

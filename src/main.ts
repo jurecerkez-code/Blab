@@ -4,7 +4,7 @@ import { type Scored, highlights, sentences } from './highlights';
 import { Meter } from './meter';
 import { NoteClock } from './notes';
 import { Recorder, formatDuration } from './recorder';
-import { recallRoot, rememberRoot } from './store';
+import { forgetRoot, recallRoot, rememberRoot } from './store';
 import { type Line, parse, render, stamp } from './timeline';
 import { ModelMissingError, Transcriber } from './transcriber';
 import {
@@ -15,8 +15,8 @@ import {
   createRecordingDir,
   ensureAccess,
   listRecordings,
-  looksLikeGitCheckout,
   pickRoot,
+  repoAround,
   readFile,
   readText,
   saveAs,
@@ -70,8 +70,23 @@ function say(message: string, isError = false, offerMicSettings = false): void {
 
 // ---------------------------------------------------------------- folder
 
-async function connect(handle: FileSystemDirectoryHandle, prompt: boolean): Promise<boolean> {
-  if (!(await ensureAccess(handle, prompt))) return false;
+type Connected = 'ok' | 'no-access' | 'in-repo';
+
+async function connect(handle: FileSystemDirectoryHandle, prompt: boolean): Promise<Connected> {
+  if (!(await ensureAccess(handle, prompt))) return 'no-access';
+  // Checked before anything is committed to, so a refusal leaves whatever
+  // folder was already in use exactly where it was. Refused rather than warned
+  // about: a warning puts the whole weight of it on somebody remembering, weeks
+  // later on the day they happen to type `git add -A`, what a status line said
+  // when they picked the folder.
+  const repo = await repoAround(handle);
+  if (repo) {
+    say(
+      `Blab will not record into ${repo}, a git repository — recordings there would sit in a working tree and could be committed and pushed. Pick a folder outside it.`,
+      true,
+    );
+    return 'in-repo';
+  }
   root = handle;
   await rememberRoot(handle);
   ui.folderName.textContent = handle.name;
@@ -81,24 +96,19 @@ async function connect(handle: FileSystemDirectoryHandle, prompt: boolean): Prom
   ui.library.classList.remove('hidden');
   closeDetail();
   await refreshList();
-  // Said on every connect, not just the first, because the folder is
-  // remembered across restarts — the one time it matters is the day someone
-  // commits, which is rarely the day they picked the folder.
-  const inCheckout = await looksLikeGitCheckout(handle);
   say(
-    inCheckout
-      ? `Using ${handle.name}, which is a git repository. Recordings are saved inside it — check .gitignore before you commit.`
-      : recordings.length
-        ? `Using ${handle.name}. Type a title and press Record.`
-        : `Using ${handle.name}. Type a title and press Record — Blab makes the folder for you.`,
-    inCheckout,
+    recordings.length
+      ? `Using ${handle.name}. Type a title and press Record.`
+      : `Using ${handle.name}. Type a title and press Record — Blab makes the folder for you.`,
   );
-  return true;
+  return 'ok';
 }
 
 async function choose(): Promise<void> {
   try {
-    if (!(await connect(await pickRoot(), true))) {
+    // 'in-repo' has already said why, and the picker is not reopened on top of
+    // that message: it would hide the one sentence explaining what just failed.
+    if ((await connect(await pickRoot(), true)) === 'no-access') {
       say('Blab cannot write to that folder yet. Pick it again and choose Allow.', true);
     }
   } catch (err) {
@@ -658,7 +668,7 @@ async function setupPickClicked(): Promise<void> {
   ui.setupPick.textContent = 'Pick a folder';
   // Re-granting a remembered folder is one click; if they say no, let them
   // pick a different one.
-  if (saved && (await connect(saved, true))) return;
+  if (saved && (await connect(saved, true)) === 'ok') return;
   await choose();
 }
 
@@ -687,12 +697,20 @@ async function boot(): Promise<void> {
     return;
   }
   const saved = await recallRoot();
-  // A remembered folder still needs the user to re-grant it, and the browser
-  // only allows that from a click. So we show the picker screen and wait.
-  if (saved && (await connect(saved, false))) return;
   if (saved) {
-    pending = saved;
-    ui.setupPick.textContent = `Open ${saved.name}`;
+    const status = await connect(saved, false);
+    if (status === 'ok') return;
+    if (status === 'in-repo') {
+      // Remembered from a version that allowed it. It will be refused every
+      // time from here, so it is dropped rather than offered again — and the
+      // message connect() left on screen says why.
+      await forgetRoot();
+    } else {
+      // A remembered folder still needs the user to re-grant it, and the
+      // browser only allows that from a click. Show the picker screen and wait.
+      pending = saved;
+      ui.setupPick.textContent = `Open ${saved.name}`;
+    }
   }
   ui.setup.classList.remove('hidden');
 }

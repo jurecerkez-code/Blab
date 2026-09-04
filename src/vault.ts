@@ -60,8 +60,9 @@ export async function pickRoot(): Promise<FileSystemDirectoryHandle> {
  * True when the folder is the root of a git checkout. Worth saying out loud:
  * Blab writes each recording as a folder directly inside the one that was
  * picked, so a checkout leaves someone's audio and notes sitting in a working
- * tree, one `git add -A` from being published. Nothing here refuses the choice
- * — it may well be deliberate — it only makes it visible.
+ * tree, one `git add -A` from being published. Recordings belong on the laptop
+ * they were made on and nowhere else, so a folder this is true of is refused
+ * rather than warned about.
  */
 export async function looksLikeGitCheckout(root: FileSystemDirectoryHandle): Promise<boolean> {
   try {
@@ -78,6 +79,26 @@ export async function looksLikeGitCheckout(root: FileSystemDirectoryHandle): Pro
   } catch {
     return false;
   }
+}
+
+/**
+ * The name of the git repository this folder sits in, or null.
+ *
+ * Two checks, because neither covers the other. `looksLikeGitCheckout` reads
+ * the folder itself and works everywhere, including the browser build, but a
+ * directory handle cannot reach its parent — so it only ever catches the top of
+ * a checkout, and misses a notes folder three levels inside one. The desktop
+ * app can do better: the shell saw where this folder is when access to it was
+ * granted, and can climb from there. Where there is no shell to ask, the first
+ * answer stands.
+ */
+export async function repoAround(root: FileSystemDirectoryHandle): Promise<string | null> {
+  if (await looksLikeGitCheckout(root)) return root.name;
+  // The shell watched the grant go past and knows where this folder is. It is
+  // told the name so it can refuse to answer about a different folder.
+  const repo = await window.blab?.gitRoot(root.name);
+  // Just the last segment: the message names a repository, not a home folder.
+  return repo ? repo.split(/[\\/]/).filter(Boolean).pop() || repo : null;
 }
 
 /** True when we may read and write. Prompts the user if the grant has lapsed. */
