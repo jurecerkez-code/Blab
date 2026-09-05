@@ -56,9 +56,17 @@ const MIN_LINES = 12;
 const COMMON = 0.6;
 
 /**
- * The words that carry no subject, in the two languages Blab transcribes.
+ * The words that carry no subject: English, and then Croatian.
+ *
+ * Blab has written English only since 0.5.0, so the second half looks like
+ * dead weight and is not. Highlights are worked out from transcript.md at the
+ * moment a recording is opened, and that file can be older than the app
+ * reading it — anyone who used the language picker while it existed still has
+ * Croatian transcripts sitting in their folder, and dropping these words would
+ * quietly make their shortlists worse for no gain.
+ *
  * Kept in one list rather than one per language because a talk is in one
- * language and the other list costs a few string comparisons.
+ * language and the other half costs a few string comparisons.
  */
 const STOP = new Set(
   `

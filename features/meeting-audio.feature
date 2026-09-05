@@ -37,7 +37,7 @@ Feature: Recording an online meeting
     Given I am on Windows
     Then there is a control beside Record for including what the computer plays
     And it is off until I turn it on
-    And my choice is remembered the same way my folder and my language are
+    And my choice is remembered the same way my folder is
 
   Scenario: The choice cannot be changed mid-recording
     Given I am recording with the meeting setting on
