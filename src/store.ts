@@ -23,8 +23,18 @@ function tx<T>(mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRequest<
     (db) =>
       new Promise<T>((resolve, reject) => {
         const req = run(db.transaction(STORE, mode).objectStore(STORE));
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
+        // Every call opens its own connection, so every call has to give it
+        // back. close() does not cut the transaction short — it marks the
+        // connection to shut once the transaction finishes — so it is safe to
+        // ask for here rather than tracking the transaction separately.
+        req.onsuccess = () => {
+          db.close();
+          resolve(req.result);
+        };
+        req.onerror = () => {
+          db.close();
+          reject(req.error);
+        };
       }),
   );
 }

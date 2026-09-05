@@ -227,10 +227,29 @@ function readOpusTrack(data: Uint8Array): OpusTrack | null {
     return n;
   };
 
+  /** An ASCII element body, which is how Matroska stores a codec name. */
+  const text = (pos: number, len: number) => {
+    let out = '';
+    // Trailing NULs are legal padding on a Matroska string.
+    for (let i = 0; i < len && data[pos + i]; i++) out += String.fromCharCode(data[pos + i]);
+    return out;
+  };
+
+  /** What one TrackEntry said about itself. */
+  type Entry = { number: number; codec: string; channels: number; description: Uint8Array | null };
+  const blank = (): Entry => ({ number: -1, codec: '', channels: 1, description: null });
+
   let timecodeScale = 1_000_000; // nanoseconds per tick; 1 ms is the default
-  let trackNumber = -1;
-  let channels = 1;
-  let description: Uint8Array | null = null;
+  /** The TrackEntry being walked through right now. */
+  let entry = blank();
+  /**
+   * The one that turned out to be Opus — the only track whose blocks we want.
+   *
+   * Held on an object rather than in a plain `let` because walk() below is
+   * where it gets filled in, and TypeScript does not follow an assignment made
+   * inside a nested function: it would go on believing this is still null.
+   */
+  const found: { opus: Entry | null } = { opus: null };
   const packets: { data: Uint8Array; timestampUs: number }[] = [];
   let clusterTime = 0;
 
@@ -260,21 +279,39 @@ function readOpusTrack(data: Uint8Array): OpusTrack | null {
           timecodeScale = uint(body, size.value);
           break;
         case ID.TRACK_NUMBER:
-          trackNumber = uint(body, size.value);
+          entry.number = uint(body, size.value);
+          break;
+        case ID.CODEC_ID:
+          entry.codec = text(body, size.value);
           break;
         case ID.CODEC_PRIVATE:
-          description = data.slice(body, body + size.value);
+          entry.description = data.slice(body, body + size.value);
           break;
         case ID.CHANNELS:
-          channels = uint(body, size.value) || 1;
+          entry.channels = uint(body, size.value) || 1;
           break;
+        case ID.TRACK_ENTRY: {
+          // Each field above belongs to the entry it sits inside, so they are
+          // read into a scratch and kept only if this entry turns out to be the
+          // Opus one. Held flat, as they were, a second track would silently
+          // overwrite the first — and then its blocks would be fed to an Opus
+          // decoder as if they were sound.
+          const outer = entry;
+          entry = blank();
+          walk(body, stop);
+          if (entry.codec.startsWith('A_OPUS')) found.opus = entry;
+          entry = outer;
+          break;
+        }
         case ID.TIMECODE:
           clusterTime = uint(body, size.value);
           break;
         case ID.SIMPLE_BLOCK:
         case ID.BLOCK: {
           const track = vint(body, false);
-          if (!track) break;
+          // Tracks always comes before the clusters, so by the time a block
+          // arrives we know which track we actually want.
+          if (!track || !found.opus || track.value !== found.opus.number) break;
           const at = body + track.width;
           // Block header: signed 16-bit time relative to the cluster, then flags.
           const relative = view.getInt16(at, false);
@@ -299,6 +336,6 @@ function readOpusTrack(data: Uint8Array): OpusTrack | null {
   walk(0, data.length);
 
   // Nothing recognisable came back, so this is not the file we know how to read.
-  if (!packets.length || trackNumber < 0) return null;
-  return { channels, description, packets };
+  if (!found.opus || !packets.length) return null;
+  return { channels: found.opus.channels, description: found.opus.description, packets };
 }

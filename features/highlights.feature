@@ -59,7 +59,10 @@ Feature: The lines worth going back to
     And the installer is the same size it was
     And the picking is done before the panel finishes opening
 
-  Scenario Outline: It works in both languages Blab transcribes
+  # Blab has written English only since 0.5.0, but it still reads back
+  # transcript.md files older than itself, so the Croatian half of the stop
+  # word list in src/highlights.ts stays where it is.
+  Scenario Outline: It works on a Croatian transcript as well as an English one
     Given a transcript in <language>
     Then the words that hold sentences together are ignored
     And the words the talk is about are what decides the picks

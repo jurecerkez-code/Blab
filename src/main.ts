@@ -170,7 +170,20 @@ async function open(rec: Recording): Promise<void> {
   closeDetail();
   selected = rec.dir;
 
-  const dir = await root.getDirectoryHandle(rec.dir);
+  // The folder can be gone by the time it is clicked: renamed, deleted, or on
+  // a drive that was unplugged since the list was drawn. Without this the
+  // click does nothing whatsoever — the panel stays shut, no message appears,
+  // and the rejection goes nowhere anyone can see.
+  let dir: FileSystemDirectoryHandle;
+  try {
+    dir = await root.getDirectoryHandle(rec.dir);
+  } catch {
+    selected = null;
+    say(`${rec.dir} is not in ${root.name} any more. It may have been moved or deleted.`, true);
+    await refreshList();
+    return;
+  }
+
   const [notes, transcript, audio] = await Promise.all([
     readText(dir, NOTES),
     readText(dir, TRANSCRIPT),

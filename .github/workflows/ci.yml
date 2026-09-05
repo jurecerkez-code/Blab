@@ -1,0 +1,49 @@
+# Runs the checks on every push and every pull request.
+#
+# release.yml only fires on a tag, and it builds rather than tests: it never
+# runs `npm test`. So until now the 41 tests and the typecheck ran only when
+# somebody remembered to run them, and a pull request arrived with nothing
+# behind it. This is the missing half.
+#
+# It needs no model. The specs import the modules directly and drive them, so
+# nothing here ever reaches Whisper — which is why there is no `npm run setup`
+# below and no 77 MB download. The whole job is a Node install, one browser,
+# and about twenty seconds of tests.
+name: CI
+
+on:
+  # main only, because every branch worth pushing turns up below as a pull
+  # request and running both would run everything twice.
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # `npm run build` would do this as well, but it also spends a minute
+      # bundling, and a type error is worth hearing about on its own.
+      - run: npx tsc --noEmit
+
+      # Chromium only. playwright.config.ts defines no other project, and the
+      # meter tests need a real browser rather than a headless shell: an
+      # animation frame never fires in a window that is never painted.
+      - run: npx playwright install --with-deps chromium
+
+      # The github reporter annotates the failing line in the diff, which is
+      # the whole of what a report would have given us. playwright.config.ts
+      # switches to it whenever CI is set, so there is nothing to pass here.
+      - run: npm test
