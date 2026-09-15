@@ -60,6 +60,50 @@ export function render(lines: Line[]): string {
 }
 
 /**
+ * One subtitle cue per line. The end of a cue is the start of the next one;
+ * the last cue runs a short while after its own start.
+ */
+function durations(lines: Line[]): { at: number; end: number; text: string }[] {
+  return lines.map((l, i) => ({
+    at: l.at,
+    end: i + 1 < lines.length ? lines[i + 1].at : l.at + 4000,
+    text: l.text.trim(),
+  }));
+}
+
+function srtTime(ms: number): string {
+  const h = Math.floor(ms / 3_600_000);
+  const m = Math.floor(ms / 60_000) % 60;
+  const s = Math.floor(ms / 1000) % 60;
+  const milli = ms % 1000;
+  const pad = (n: number, w = 2) => String(n).padStart(w, '0');
+  return `${pad(h)}:${pad(m)}:${pad(s)},${pad(milli, 3)}`;
+}
+
+/** SubRip, from the timed transcript. Three lines would be thin subtitles. */
+export function toSrt(lines: Line[]): string {
+  return durations(lines)
+    .filter((d) => d.text.length >= 3)
+    .map((d, i) => `${i + 1}\n${srtTime(d.at)} --> ${srtTime(d.end)}\n${d.text}`)
+    .join('\n');
+}
+
+function vttTime(ms: number): string {
+  return srtTime(ms).replace(',', '.');
+}
+
+/** WebVTT, from the timed transcript. */
+export function toVtt(lines: Line[]): string {
+  return (
+    'WEBVTT\n\n' +
+    durations(lines)
+      .filter((d) => d.text.length >= 3)
+      .map((d) => `${vttTime(d.at)} --> ${vttTime(d.end)}\n${d.text}`)
+      .join('\n')
+  );
+}
+
+/**
  * A stamped block back into lines, or null when nothing in it is stamped —
  * which is every recording made before this existed. Callers use the null to
  * fall back to showing the text as it is rather than inventing times for it.

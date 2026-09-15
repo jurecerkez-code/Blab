@@ -1,42 +1,50 @@
 // Whisper runs here so a long talk never freezes the page.
 import {
-  BaseStreamer,
+  TextStreamer,
   env,
   pipeline,
   type AutomaticSpeechRecognitionPipeline,
-  type TextStreamer,
 } from '@huggingface/transformers';
+import { type ModelId, modelById } from './models';
 import { fromChunks } from './timeline';
+import { assembleSpeech, mapToRecording, speechWindows } from './vad';
 
 /**
- * Multilingual base, even though Blab only writes English.
+ * Whisper stays multilingual even though Blab only writes English.
  *
- * `whisper-base.en` is the obvious swap here — same parameter count, same
- * 73 MB, all of it spent on one language — and it was tried. On five sentences
- * put through both, it tied on three, both got one wrong, and it lost the
- * fifth: "rear delt" came back as "rear dealt" where the multilingual model
- * wrote it correctly. Aggregate benchmarks favour the .en tiers; this
- * vocabulary did not, so the measurement wins over the benchmark.
- *
- * Staying here also keeps the mirror in scripts/setup.mjs working, which only
- * holds a copy of this model.
- *
- * Swap for 'Xenova/whisper-tiny' if base is too slow on your laptop.
+ * `whisper-base.en` is the obvious swap — same parameter count, same 73 MB,
+ * all of it spent on one language — and it was tried. On five sentences put
+ * through both, it tied on three, both got one wrong, and it lost the fifth:
+ * "rear delt" came back as "rear dealt" where the multilingual model wrote it
+ * correctly. Aggregate benchmarks favour the .en tiers; this vocabulary did
+ * not, so the measurement wins over the benchmark.
  */
-const MODEL = 'Xenova/whisper-base';
 const CHUNK_S = 30;
 const STRIDE_S = 5;
 /** Longest run of tokens allowed to repeat before generation is forced to move on. */
 const NO_REPEAT_WORDS = 6;
 const SAMPLE_RATE = 16000;
 
-export type ToWorker = {
-  type: 'transcribe';
-  id: string;
-  audio: Float32Array;
-  modelPath: string;
-  ortPath: string;
-};
+export type ToWorker =
+  | {
+      type: 'transcribe';
+      id: string;
+      audio: Float32Array;
+      modelPath: string;
+      ortPath: string;
+      /** Which of the installed models to run. */
+      model: ModelId;
+    }
+  | {
+      type: 'live';
+      id: string;
+      audio: Float32Array;
+      modelPath: string;
+      ortPath: string;
+      model: ModelId;
+      /** Where this window starts in the recording, in ms. */
+      at: number;
+    };
 
 /** A stretch of speech and the millisecond of the recording it starts at. */
 export type Segment = { at: number; text: string };
@@ -44,15 +52,31 @@ export type Segment = { at: number; text: string };
 export type FromWorker =
   | { type: 'loading' }
   | { type: 'progress'; id: string; done: number; total: number }
-  | { type: 'done'; id: string; text: string; segments: Segment[]; degenerate: boolean }
+  /** Fired as each chunk finishes, with the plain words so far (no times). */
+  | { type: 'partial'; id: string; text: string }
+  | {
+      type: 'done';
+      id: string;
+      text: string;
+      segments: Segment[];
+      degenerate: boolean;
+      noSpeech: boolean;
+    }
+  | { type: 'live'; id: string; text: string | null; at: number }
   | { type: 'failed'; id: string; message: string; modelMissing: boolean };
 
 const post = (msg: FromWorker) => self.postMessage(msg);
 
-let asr: Promise<AutomaticSpeechRecognitionPipeline> | null = null;
+/** One pipeline per model; the worker lives as long as the page does. */
+const asrCache = new Map<string, Promise<AutomaticSpeechRecognitionPipeline>>();
 
 /** The weights file — the part that is missing when setup has not been run. */
-const WEIGHTS = `${MODEL}/onnx/encoder_model_quantized.onnx`;
+const weightsFor = (repo: string, modelPath: string) => {
+  const base = modelPath.endsWith('/') ? modelPath : modelPath + '/';
+  return `${base}${repo}/onnx/encoder_model_quantized.onnx`;
+};
+const vadWeights = (modelPath: string) =>
+  `${modelPath}onnx-community/silero-vad/onnx/model_quantized.onnx`;
 
 /** Marker so the main thread can offer the setup instructions, not a stack trace. */
 class ModelMissing extends Error {}
@@ -63,28 +87,28 @@ class ModelMissing extends Error {}
  * public/ with index.html and a 200, which reaches onnxruntime as a baffling
  * "protobuf parsing failed" instead of anything about a missing file.
  */
-async function modelIsInstalled(modelPath: string): Promise<boolean> {
+async function modelIsInstalled(url: string): Promise<boolean> {
   try {
-    const res = await fetch(new URL(WEIGHTS, modelPath), { method: 'HEAD' });
+    const res = await fetch(url, { method: 'HEAD' });
     if (!res.ok) return false;
     if ((res.headers.get('content-type') ?? '').includes('text/html')) return false;
-    // The real file is ~22 MB; anything tiny is a stand-in page, not weights.
+    // The real file is many MB; anything tiny is a stand-in page, not weights.
     return Number(res.headers.get('content-length')) > 1_000_000;
   } catch {
     return false;
   }
 }
 
-function load(modelPath: string, ortPath: string) {
+async function load(repo: string, modelPath: string, ortPath: string) {
   // Hard offline guarantee: if a file is missing we fail loudly rather than
   // quietly reaching for the internet.
   env.allowRemoteModels = false;
   env.allowLocalModels = true;
   env.localModelPath = modelPath;
   // The files are already on local disk, so the browser cache would only be a
-  // second copy of 76 MB. Worse, if anything ever answers with a fallback page
-  // instead of a model file, that page gets cached and the app stays broken
-  // even after a correct setup. Read from disk every time instead.
+  // second copy of many megabytes. Worse, if anything ever answers with a
+  // fallback page instead of a model file, that page gets cached and the app
+  // stays broken even after a correct setup. Read from disk every time.
   env.useBrowserCache = false;
 
   const wasm = env.backends.onnx.wasm!;
@@ -97,7 +121,16 @@ function load(modelPath: string, ortPath: string) {
   // out at all, hence the 1 — see the COOP/COEP headers in electron/main.cjs.
   wasm.numThreads = self.crossOriginIsolated ? navigator.hardwareConcurrency || 2 : 1;
 
-  return pipeline('automatic-speech-recognition', MODEL, { device: 'wasm', dtype: 'q8' });
+  return pipeline('automatic-speech-recognition', repo, { device: 'wasm', dtype: 'q8' });
+}
+
+function getAsr(repo: string, modelPath: string, ortPath: string) {
+  let p = asrCache.get(repo);
+  if (!p) {
+    p = load(repo, modelPath, ortPath);
+    asrCache.set(repo, p);
+  }
+  return p;
 }
 
 /** How many 30s windows the pipeline will walk through, so we can show progress. */
@@ -108,19 +141,30 @@ function countChunks(samples: number): number {
   return Math.ceil((samples - window) / jump) + 1;
 }
 
-/** The pipeline ends one generation per chunk; that is our progress tick. */
-class ChunkCounter extends BaseStreamer {
-  private done = 0;
+/**
+ * Text so far, pushed to the page after each chunk, and the chunk counter
+ * that already drove progress. Both in one streamer: generate() calls
+ * end() once per chunk, which is the same moment a partial is worth saving.
+ */
+class PartialStreamer extends TextStreamer {
+  private acc = '';
   constructor(
-    private id: string,
-    private total: number,
+    tokenizer: any,
+    private readonly id: string,
+    private done: number,
+    private readonly total: number,
+    private readonly onPartial: (id: string, text: string) => void,
   ) {
-    super();
+    super(tokenizer, {
+      skip_prompt: true,
+      skip_special_tokens: true,
+      callback_function: (t: string) => (this.acc += t),
+    });
   }
-  put() {}
-  end() {
+  override end(): void {
     this.done = Math.min(this.done + 1, this.total);
     post({ type: 'progress', id: this.id, done: this.done, total: this.total });
+    this.onPartial(this.id, this.acc);
   }
 }
 
@@ -157,90 +201,167 @@ async function looping(text: string): Promise<boolean> {
   }
 }
 
-self.addEventListener('message', async (event: MessageEvent<ToWorker>) => {
-  if (event.data.type !== 'transcribe') return;
-  const { id, audio, modelPath, ortPath } = event.data;
-  let ready = false;
+/** The common transcription settings, shared by the full and live jobs. */
+function settings(streamer: TextStreamer) {
+  return {
+    chunk_length_s: CHUNK_S,
+    stride_length_s: STRIDE_S,
+    // Whisper knows when each phrase was said and will tell us for free — it
+    // is the same generation either way. Having it means a transcript line
+    // can point at a second of the audio, which is what makes clicking one
+    // jump the player there.
+    return_timestamps: true,
+    task: 'transcribe' as const,
+    // Pinned in code rather than chosen in the UI. The picker that used to
+    // set this is gone: the language cannot be detected, so it had to be
+    // named by hand, and naming it wrong did not degrade a transcript — it
+    // destroyed it. Leaving this out is not "detect it" either; transformers
+    // .js has no detection and quietly assumes English, so saying English is
+    // the same behaviour said out loud.
+    language: 'en' as const,
+    // Whisper gets stuck. On a quiet room, or noise that sounds vaguely like
+    // speech, it will latch onto a phrase and repeat it hundreds of times —
+    // one recording here lost 434 words in a row to "like a city". Forbidding
+    // a repeated run of this many words breaks the loop at the second
+    // repetition. Real speech does not repeat six words verbatim back to
+    // back, so nothing genuine is lost.
+    no_repeat_ngram_size: NO_REPEAT_WORDS,
+    // The n-gram rule above only forbids an *exact* six word repeat, and a
+    // real loop walks straight around it. One recording came back as
+    // hundreds of "ti ki pi si" in every order: four tokens rearranged give
+    // thousands of technically distinct six-grams, none of them a repeat.
+    // This penalises a token for having been used at all, so a rotation
+    // through a tiny vocabulary decays instead of running forever. Kept mild
+    // — real speech reuses common words constantly and a heavy hand here
+    // starts rewriting honest sentences.
+    repetition_penalty: 1.15,
+    streamer,
+  };
+}
 
+async function runTranscribe(
+  id: string,
+  audio: Float32Array,
+  modelPath: string,
+  ortPath: string,
+  model: ModelId,
+): Promise<void> {
+  const repo = modelById(model).repo;
   try {
-    if (!asr) {
-      post({ type: 'loading' });
-      if (!(await modelIsInstalled(modelPath))) {
-        throw new ModelMissing(`No Whisper weights at ${modelPath}${WEIGHTS}`);
-      }
-      asr = load(modelPath, ortPath);
+    post({ type: 'loading' });
+    const weights = weightsFor(repo, modelPath);
+    if (!(await modelIsInstalled(weights))) {
+      throw new ModelMissing(`No Whisper weights at ${modelPath}${repo}/onnx/encoder_model_quantized.onnx`);
     }
-    const transcribe = await asr;
-    ready = true;
+    const asr = await getAsr(repo, modelPath, ortPath);
 
-    const total = countChunks(audio.length);
-    post({ type: 'progress', id, done: 0, total });
+    // VAD first: silence is where Whisper hallucinates, and skipping it is
+    // how a quiet room stops costing minutes. Fall back to the full signal
+    // the moment anything about the VAD is uncertain.
+    let source = audio;
+    let offsets: ReturnType<typeof assembleSpeech>['offsets'] = [];
+    let vadFailed = false;
+    if (await modelIsInstalled(vadWeights(modelPath))) {
+      try {
+        const windows = await speechWindows(audio, vadWeights(modelPath), ortPath);
+        if (windows.length) {
+          const built = assembleSpeech(audio, windows);
+          source = built.samples;
+          offsets = built.offsets;
+        } else {
+          source = new Float32Array(0); // a recording with nothing to say
+        }
+      } catch {
+        vadFailed = true;
+        source = audio;
+      }
+    }
 
-    const result = await transcribe(audio, {
-      chunk_length_s: CHUNK_S,
-      stride_length_s: STRIDE_S,
-      // Whisper knows when each phrase was said and will tell us for free — it
-      // is the same generation either way. Having it means a transcript line
-      // can point at a second of the audio, which is what makes clicking one
-      // jump the player there.
-      //
-      // It does cost a little of the guard below. Timestamps are tokens too, so
-      // a repetition that straddles a segment boundary has one wedged into the
-      // middle of it and stops looking like a repeat. Loops inside a segment —
-      // which is nearly all of them — are still cut at the second repetition.
-      return_timestamps: true,
-      // Whisper can transcribe or translate, and left to itself it sometimes
-      // picks translate. Blab always wants the words that were actually said,
-      // so this is pinned.
-      task: 'transcribe',
-      // Pinned in code rather than chosen in the UI. The picker that used to
-      // set this is gone: the language cannot be detected, so it had to be
-      // named by hand, and naming it wrong did not degrade a transcript — it
-      // destroyed it. Leaving this out is not "detect it" either; transformers
-      // .js has no detection and quietly assumes English, so saying English is
-      // the same behaviour said out loud.
-      language: 'en',
-      // Whisper gets stuck. On a quiet room, or noise that sounds vaguely like
-      // speech, it will latch onto a phrase and repeat it hundreds of times —
-      // one recording here lost 434 words in a row to "like a city". Forbidding
-      // a repeated run of this many words breaks the loop at the second
-      // repetition. Real speech does not repeat six words verbatim back to
-      // back, so nothing genuine is lost.
-      no_repeat_ngram_size: NO_REPEAT_WORDS,
-      // The n-gram rule above only forbids an *exact* six word repeat, and a
-      // real loop walks straight around it. One recording came back as
-      // hundreds of "ti ki pi si" in every order: four tokens rearranged give
-      // thousands of technically distinct six-grams, none of them a repeat.
-      // This penalises a token for having been used at all, so a rotation
-      // through a tiny vocabulary decays instead of running forever. Kept mild
-      // — real speech reuses common words constantly and a heavy hand here
-      // starts rewriting honest sentences.
-      repetition_penalty: 1.15,
-      // Typed as TextStreamer upstream, but generate() only ever calls
-      // put()/end() — the BaseStreamer contract this implements.
-      streamer: new ChunkCounter(id, total) as unknown as TextStreamer,
+    let text = '';
+    let segments: Segment[] = [];
+    let noSpeech = false;
+
+    if (source.length > 0) {
+      const total = countChunks(source.length);
+      post({ type: 'progress', id, done: 0, total });
+
+      const result = await asr(
+        source,
+        settings(
+          new PartialStreamer(asr.tokenizer as any, id, 0, total, (_id, partialText) => {
+            post({ type: 'partial', id, text: partialText });
+          }),
+        ),
+      );
+
+      const parts = Array.isArray(result) ? result : [result];
+      text = parts
+        .map((r) => r.text)
+        .join(' ')
+        .trim();
+      const rawLines = fromChunks(parts);
+      segments =
+        offsets.length > 0
+          ? rawLines.map((l) => ({ at: mapToRecording(l.at / 1000, offsets), text: l.text }))
+          : rawLines;
+    } else {
+      noSpeech = true;
+    }
+
+    post({
+      type: 'done',
+      id,
+      text,
+      segments,
+      degenerate: vadFailed ? false : await looping(text),
+      noSpeech,
     });
-
-    const parts = Array.isArray(result) ? result : [result];
-    const text = parts
-      .map((r) => r.text)
-      .join(' ')
-      .trim();
-    post({ type: 'done', id, text, segments: fromChunks(parts), degenerate: await looping(text) });
   } catch (err) {
     // A failed load must not be cached, or every later attempt fails too. A
     // model that loaded fine and then hit a bad clip is worth keeping — it
     // takes seconds to load and the next recording will want it.
-    if (!ready) asr = null;
+    asrCache.delete(repo);
     const message = err instanceof Error ? err.message : String(err);
     post({
       type: 'failed',
       id,
       message,
-      // The regex catches a half-finished setup, where the weights are there
-      // but some smaller file never landed.
-      modelMissing:
-        err instanceof ModelMissing || /not found locally|allowRemoteModels=false/.test(message),
+      modelMissing: err instanceof ModelMissing || /not found locally|allowRemoteModels=false/.test(message),
     });
+  }
+}
+
+/** A short window for the live captions; partial results are fine. */
+async function runLive(
+  id: string,
+  audio: Float32Array,
+  modelPath: string,
+  ortPath: string,
+  model: ModelId,
+  at: number,
+): Promise<void> {
+  try {
+    const repo = modelById(model).repo;
+    const asr = await getAsr(repo, modelPath, ortPath);
+    const result = await asr(audio, settings(new TextStreamer(asr.tokenizer as any, { skip_prompt: true })));
+    const parts = Array.isArray(result) ? result : [result];
+    const text = parts
+      .map((r) => r.text)
+      .join(' ')
+      .trim();
+    const first = fromChunks(parts)[0];
+    post({ type: 'live', id, text: text || null, at: first ? at + first.at : at });
+  } catch {
+    // Live captions are a preview; the real transcript happens at Stop with
+    // the full pipeline. A failure here must never cost the recording.
+    post({ type: 'live', id, text: null, at });
+  }
+}
+
+self.addEventListener('message', (event: MessageEvent<ToWorker>) => {
+  if (event.data.type === 'transcribe') {
+    void runTranscribe(event.data.id, event.data.audio, event.data.modelPath, event.data.ortPath, event.data.model);
+  } else if (event.data.type === 'live') {
+    void runLive(event.data.id, event.data.audio, event.data.modelPath, event.data.ortPath, event.data.model, event.data.at);
   }
 });

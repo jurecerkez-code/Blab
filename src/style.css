@@ -130,6 +130,98 @@ button.record.is-recording {
   margin-top: -6px;
 }
 
+/* The little settings row on the recorder card. */
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.check input {
+  accent-color: var(--accent);
+}
+
+.pick {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.spacer {
+  flex: 1;
+}
+
+select {
+  font: inherit;
+  background: #2a2a22;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  cursor: pointer;
+  max-width: 260px;
+}
+
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+select:disabled {
+  opacity: 0.5;
+}
+
+/* Live captions: a preview line while recording. */
+.captions {
+  min-height: 0;
+}
+
+.captions .caption {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  width: 100%;
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: var(--text);
+  font-size: 15px;
+  cursor: default;
+}
+
+.captions .caption .at {
+  flex: none;
+  color: var(--accent);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Wraps the action buttons in the detail panel. */
+.row.wrap {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.library-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.library-head h2 {
+  flex: 1;
+}
+
+#detail .speed {
+  flex: none;
+  max-width: 110px;
+}
+
 .meter .bar {
   flex: 1;
   min-width: 3px;
@@ -223,7 +315,7 @@ textarea {
   font-size: 18px;
 }
 
-#detail audio { width: 100%; }
+#detail .row audio { flex: 1; min-width: 0; }
 
 #detail .block h4 {
   margin: 0 0 6px;
