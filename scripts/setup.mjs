@@ -67,6 +67,18 @@ else {
 
 const mb = (bytes) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
+/** A download is accepted when its size matches what the server promised.
+ * Not sha256: HuggingFace's CDN tags files with a storage key that is not the
+ * content hash (checked on a 2 KB config.json), so ETag matching rejects
+ * good downloads. Size plus onnxruntime successfully loading the file is the
+ * practical gate.
+ */
+async function verify(path, got, expected) {
+  if (expected && got !== expected) {
+    throw new Error(`${path} came down at ${got} bytes, expected ${expected}`);
+  }
+}
+
 async function sizeOf(path) {
   try {
     return (await stat(path)).size;
@@ -94,17 +106,48 @@ async function open(remote, model) {
 }
 
 async function download(remote, model, local) {
+  await mkdir(dirname(local), { recursive: true });
+  const tmp = `${local}.part`;
+
+  // Resume: a dropped connection is normal on some networks, and the partial
+  // file is a good start, not garbage. Ask the server for the rest of it.
+  const have = await sizeOf(tmp);
+  if (have > 0) {
+    try {
+      const range = await fetch(`${HOST}/${model}/resolve/main/${remote}`, {
+        headers: { Range: `bytes=${have}-` },
+        redirect: 'follow',
+      });
+      if (range.ok && range.status === 206 && range.body) {
+        const append = createWriteStream(tmp, { flags: 'a' });
+        await pipeline(Readable.fromWeb(range.body), append);
+        const got = await sizeOf(tmp);
+        const total = Number((range.headers.get('content-range') ?? '').split('/')[1]);
+        if (total && got !== total) {
+          throw new Error(`${remote} resumed but came down short: ${got} of ${total} bytes`);
+        }
+        process.stdout.write(`  resume  ${remote} from ${mb(have)} … `);
+        await verify(tmp, got, total || 0);
+        console.log(mb(got));
+        await copyFile(tmp, local);
+        const { unlink } = await import('node:fs/promises');
+        await unlink(tmp);
+        return got;
+      }
+      // A 200 means the server ignored the range; fall through to a full
+      // download rather than appending to a file that is now a mix.
+    } catch {
+      // Range failed for an uninteresting reason; start over.
+    }
+  }
+
   const res = await open(remote, model);
   const expected = Number(res.headers.get('content-length')) || 0;
 
-  await mkdir(dirname(local), { recursive: true });
-  const tmp = `${local}.part`;
   await pipeline(Readable.fromWeb(res.body), createWriteStream(tmp));
 
   const got = await sizeOf(tmp);
-  if (expected && got !== expected) {
-    throw new Error(`${remote} came down short: ${got} of ${expected} bytes`);
-  }
+  await verify(tmp, got, expected || got);
   // Rename last, so an interrupted run never leaves a half file looking done.
   await copyFile(tmp, local);
   const { unlink } = await import('node:fs/promises');
