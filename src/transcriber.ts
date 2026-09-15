@@ -19,7 +19,7 @@ export class ModelMissingError extends Error {}
 const abs = (path: string) => new URL(path, document.baseURI).href;
 
 /**
- * Owns the transcription worker. One job at a time — a laptop running Whisper
+ * Owns the transcription worker. One job at a time; a laptop running Whisper
  * has nothing spare anyway. Live-caption windows ride the same queue but only
  * when it is empty: a caption computed a minute late is not a caption.
  */
@@ -58,7 +58,7 @@ export class Transcriber {
 
   /**
    * A short rolling window for the live captions. Dropped outright when the
-   * worker is busy — the recording must never wait for a caption.
+   * worker is busy; the recording must never wait for a caption.
    */
   live(
     audio: Float32Array,

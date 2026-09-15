@@ -6,7 +6,7 @@
 // whenever it is idle. They are previews, not the transcript: at Stop the
 // whole file is transcribed properly, and the captions are replaced.
 //
-// Silence is skipped before anything reaches the worker — transcribing a
+// Silence is skipped before anything reaches the worker; transcribing a
 // pause is how Whisper learns to hallucinate, and it burns the same CPU.
 
 const WINDOW_MS = 15_000;
@@ -61,7 +61,7 @@ export class LiveCaptions {
   private ring: Float32Array = new Float32Array(0);
   private sampleRate = 48000;
   private timer: number | undefined;
-  /** Last time a window went to Whisper — never more often than once a second. */
+  /** Last time a window went to Whisper; never more often than once a second. */
   private lastSentAt = 0;
   private readonly send: (audio: Float32Array, at: number) => void;
 
@@ -79,7 +79,7 @@ export class LiveCaptions {
       this.line = document.createElement('button');
       this.line.className = 'caption';
       this.line.type = 'button';
-      this.line.title = 'Live preview — the saved transcript may differ.';
+      this.line.title = 'Live preview; the saved transcript may differ.';
       this.line.disabled = true;
       this.host.append(this.line);
     }

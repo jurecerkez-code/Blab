@@ -11,7 +11,7 @@ export type ModelInfo = {
   id: ModelId;
   label: string;
   hint: string;
-  /** HuggingFace repo — also the folder name under models/, because the
+  /** HuggingFace repo; also the folder name under models/, because the
    * onnxruntime loading in the worker keys on exactly this string. */
   repo: string;
   /** Approximate download size, for the picker. */
@@ -55,7 +55,7 @@ export function modelById(id: string | null): ModelInfo {
 
 // ------------------------------------------------------------------ settings
 //
-// Plain strings, so localStorage is enough — the handles store (src/store.ts)
+// Plain strings, so localStorage is enough; the handles store (src/store.ts)
 // exists for the one thing that cannot be stringified. Both keys were chosen
 // to survive a future Blab that wants different defaults: explicit "on"/"off"
 // rather than presence.

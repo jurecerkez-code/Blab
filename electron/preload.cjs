@@ -1,6 +1,6 @@
 // The only bridge between the page and the machine. Three of the five things
 // it carries are about the microphone. macOS will not let an app grant itself
-// access — only the person sitting there can — so the most an app can do is
+// access; only the person sitting there can; so the most an app can do is
 // ask at the right moment and, if the answer was already no, open the exact
 // settings pane instead of describing where it is.
 const { contextBridge, ipcRenderer } = require('electron');

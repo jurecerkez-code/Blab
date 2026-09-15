@@ -2,7 +2,7 @@
 //
 // Blab's one real difference from a transcription service is that you are
 // typing while it listens. That means the notes already say which parts
-// mattered — nobody has to guess it back out afterwards. Keeping the moment
+// mattered; nobody has to guess it back out afterwards. Keeping the moment
 // each thought was written is what turns them from a separate document into an
 // index into the talk.
 //
@@ -45,7 +45,7 @@ export class NoteClock {
    * caret *after* the edit, and the recorded time right now.
    *
    * A new mark is laid down when typing resumes after a pause, and whenever a
-   * line break is typed — someone who does press Enter has told us where one
+   * line break is typed; someone who does press Enter has told us where one
    * thought ends, and that is worth taking at face value.
    */
   mark(value: string, caret: number, at: number): void {
@@ -78,7 +78,7 @@ export class NoteClock {
     this.tidy();
   }
 
-  /** Keeps marks in order and never two at the same place — the later one wins. */
+  /** Keeps marks in order and never two at the same place; the later one wins. */
   private tidy(): void {
     this.marks.sort((a, b) => a.offset - b.offset || a.at - b.at);
     this.marks = this.marks.filter((m, i) => this.marks[i + 1]?.offset !== m.offset);

@@ -99,7 +99,7 @@ async function connect(handle: FileSystemDirectoryHandle, prompt: boolean): Prom
   const repo = await repoAround(handle);
   if (repo) {
     say(
-      `Blab will not record into ${repo}, a git repository — recordings there would sit in a working tree and could be committed and pushed. Pick a folder outside it.`,
+      `Blab will not record into ${repo}, a git repository. Recordings there would sit in a working tree and could be committed and pushed. Pick a folder outside it.`,
       true,
     );
     return 'in-repo';
@@ -117,7 +117,7 @@ async function connect(handle: FileSystemDirectoryHandle, prompt: boolean): Prom
   say(
     recordings.length
       ? `Using ${handle.name}. Type a title and press Record.`
-      : `Using ${handle.name}. Type a title and press Record — Blab makes the folder for you.`,
+      : `Using ${handle.name}. Type a title and press Record; Blab makes the folder for you.`,
   );
   return 'ok';
 }
@@ -159,8 +159,8 @@ async function refreshModelOptions(): Promise<void> {
     const opt = document.createElement('option');
     opt.value = m.id;
     opt.textContent = (await modelInstalled(m.repo))
-      ? `${m.label} — ${m.hint}`
-      : `${m.label} — ${m.hint} (not installed — run npm run setup ${m.id === 'base' ? '' : m.id})`;
+      ? `${m.label} (${m.hint})`
+      : `${m.label} (${m.hint}). Not installed. Run npm run setup ${m.id}.`;
     ui.model.append(opt);
   }
   ui.model.value = savedModel();
@@ -275,7 +275,7 @@ async function open(rec: Recording): Promise<void> {
 
   // The folder can be gone by the time it is clicked: renamed, deleted, or on
   // a drive that was unplugged since the list was drawn. Without this the
-  // click does nothing whatsoever — the panel stays shut, no message appears,
+  // click does nothing whatsoever; the panel stays shut, no message appears,
   // and the rejection goes nowhere anyone can see.
   let dir: FileSystemDirectoryHandle;
   try {
@@ -351,7 +351,7 @@ async function open(rec: Recording): Promise<void> {
 
 /** Everything the detail panel shows, worked out from the two files on disk. */
 type View = {
-  /** Null for notes taken before Blab timed them — then they show as they are. */
+  /** Null for notes taken before Blab timed them; then they show as they are. */
   noteLines: Line[] | null;
   /** Null for a transcript saved before Blab timed it. */
   timedScript: Line[] | null;
@@ -416,7 +416,7 @@ function actions(
   }
 
   // Transcribe is always offered: first time for a recording that never got
-  // its transcript, and from then on as a way to redo it — normally with a
+  // its transcript, and from then on as a way to redo it; normally with a
   // better model, which is exactly the loop the model picker is for. The
   // picker's current model decides; the old transcript.md is overwritten.
   const transcribe = document.createElement('button');
@@ -476,7 +476,7 @@ function exportButton(
 
 /**
  * One clean text block: everything about the recording, in order, ready to
- * paste into an AI or hand to someone. The full transcript is always in it —
+ * paste into an AI or hand to someone. The full transcript is always in it , 
  * the highlights sit above it rather than in place of it, because they are a
  * way in, not a replacement.
  */
@@ -711,7 +711,7 @@ async function stopRecording(): Promise<void> {
   try {
     // Inside the try along with everything else. Left outside it, a recorder
     // that refused to stop took the finally down with it and left Record
-    // disabled for good — the one failure that needs the button most.
+    // disabled for good; the one failure that needs the button most.
     const audio = await recorder.stop();
     // The recorder noticed a quiet system capture; say so while the people
     // who just recorded a meeting can still do something about it.
@@ -766,7 +766,7 @@ async function transcribeInto(dir: FileSystemDirectoryHandle, name: string): Pro
         if (p.stage === 'loading') return say('Starting Whisper on this machine…');
         say(
           p.total > 1
-            ? `Transcribing on this machine — part ${Math.max(p.done, 1)} of ${p.total}.`
+            ? `Transcribing on this machine. Part ${Math.max(p.done, 1)} of ${p.total}.`
             : 'Transcribing on this machine…',
         );
       },
@@ -796,7 +796,7 @@ async function transcribeInto(dir: FileSystemDirectoryHandle, name: string): Pro
     if (result.degenerate) {
       say(
         `Saved to ${name}/${TRANSCRIPT}, but it looks like Whisper got stuck repeating ` +
-          'itself rather than transcribing. That means it could not hear speech clearly — ' +
+          'itself rather than transcribing. That means it could not hear speech clearly; ' +
           'get the microphone closer and record again.',
         true,
       );
@@ -875,7 +875,7 @@ async function boot(): Promise<void> {
   if (!('showDirectoryPicker' in window)) {
     ui.setup.classList.remove('hidden');
     ui.setupPick.disabled = true;
-    say('Blab needs Chrome or Edge — other browsers cannot write to a folder you pick.', true);
+    say('Blab needs Chrome or Edge. Other browsers cannot write to a folder you pick.', true);
     return;
   }
   const saved = await recallRoot();
@@ -884,7 +884,7 @@ async function boot(): Promise<void> {
     if (status === 'ok') return;
     if (status === 'in-repo') {
       // Remembered from a version that allowed it. It will be refused every
-      // time from here, so it is dropped rather than offered again — and the
+      // time from here, so it is dropped rather than offered again; and the
       // message connect() left on screen says why.
       await forgetRoot();
     } else {

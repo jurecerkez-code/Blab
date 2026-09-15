@@ -12,8 +12,8 @@ import { assembleSpeech, mapToRecording, speechWindows } from './vad';
 /**
  * Whisper stays multilingual even though Blab only writes English.
  *
- * `whisper-base.en` is the obvious swap — same parameter count, same 73 MB,
- * all of it spent on one language — and it was tried. On five sentences put
+ * `whisper-base.en` is the obvious swap; same parameter count, same 73 MB,
+ * all of it spent on one language; and it was tried. On five sentences put
  * through both, it tied on three, both got one wrong, and it lost the fifth:
  * "rear delt" came back as "rear dealt" where the multilingual model wrote it
  * correctly. Aggregate benchmarks favour the .en tiers; this vocabulary did
@@ -70,7 +70,7 @@ const post = (msg: FromWorker) => self.postMessage(msg);
 /** One pipeline per model; the worker lives as long as the page does. */
 const asrCache = new Map<string, Promise<AutomaticSpeechRecognitionPipeline>>();
 
-/** The weights file — the part that is missing when setup has not been run. */
+/** The weights file; the part that is missing when setup has not been run. */
 const weightsFor = (repo: string, modelPath: string) => {
   const base = modelPath.endsWith('/') ? modelPath : modelPath + '/';
   return `${base}${repo}/onnx/encoder_model_quantized.onnx`;
@@ -118,7 +118,7 @@ async function load(repo: string, modelPath: string, ortPath: string) {
   // before anything was measured and left half of an eight core laptop idle;
   // onnxruntime is the only heavy thing running, so there is nothing to save
   // the rest for. Without cross-origin isolation there are no threads to hand
-  // out at all, hence the 1 — see the COOP/COEP headers in electron/main.cjs.
+  // out at all, hence the 1; see the COOP/COEP headers in electron/main.cjs.
   wasm.numThreads = self.crossOriginIsolated ? navigator.hardwareConcurrency || 2 : 1;
 
   return pipeline('automatic-speech-recognition', repo, { device: 'wasm', dtype: 'q8' });
@@ -172,9 +172,9 @@ class PartialStreamer extends TextStreamer {
  * Above this, a transcript is repetition rather than speech.
  *
  * Real Whisper decides this the same way and re-runs the chunk at a higher
- * temperature when it trips. transformers.js implements none of that — there is
+ * temperature when it trips. transformers.js implements none of that; there is
  * no compression_ratio_threshold, no logprob_threshold, no temperature fallback
- * anywhere in the bundle — so Blab cannot re-decode. What it can do is notice,
+ * anywhere in the bundle; so Blab cannot re-decode. What it can do is notice,
  * and say so, which is the difference between a file you throw away and a file
  * you do not know to throw away.
  *
@@ -185,8 +185,8 @@ const LOOP_RATIO = 2.4;
 
 /** Gzip via the platform: no dependency, and the same metric Whisper uses. */
 async function looping(text: string): Promise<boolean> {
-  // Short transcripts compress badly for boring reasons — there is no room for
-  // a dictionary to pay for itself — so the ratio means nothing down there.
+  // Short transcripts compress badly for boring reasons; there is no room for
+  // a dictionary to pay for itself; so the ratio means nothing down there.
   if (text.length < 200) return false;
   try {
     const raw = new TextEncoder().encode(text);
@@ -206,7 +206,7 @@ function settings(streamer: TextStreamer) {
   return {
     chunk_length_s: CHUNK_S,
     stride_length_s: STRIDE_S,
-    // Whisper knows when each phrase was said and will tell us for free — it
+    // Whisper knows when each phrase was said and will tell us for free; it
     // is the same generation either way. Having it means a transcript line
     // can point at a second of the audio, which is what makes clicking one
     // jump the player there.
@@ -214,13 +214,13 @@ function settings(streamer: TextStreamer) {
     task: 'transcribe' as const,
     // Pinned in code rather than chosen in the UI. The picker that used to
     // set this is gone: the language cannot be detected, so it had to be
-    // named by hand, and naming it wrong did not degrade a transcript — it
+    // named by hand, and naming it wrong did not degrade a transcript; it
     // destroyed it. Leaving this out is not "detect it" either; transformers
     // .js has no detection and quietly assumes English, so saying English is
     // the same behaviour said out loud.
     language: 'en' as const,
     // Whisper gets stuck. On a quiet room, or noise that sounds vaguely like
-    // speech, it will latch onto a phrase and repeat it hundreds of times —
+    // speech, it will latch onto a phrase and repeat it hundreds of times , 
     // one recording here lost 434 words in a row to "like a city". Forbidding
     // a repeated run of this many words breaks the loop at the second
     // repetition. Real speech does not repeat six words verbatim back to
@@ -232,7 +232,7 @@ function settings(streamer: TextStreamer) {
     // thousands of technically distinct six-grams, none of them a repeat.
     // This penalises a token for having been used at all, so a rotation
     // through a tiny vocabulary decays instead of running forever. Kept mild
-    // — real speech reuses common words constantly and a heavy hand here
+    //; real speech reuses common words constantly and a heavy hand here
     // starts rewriting honest sentences.
     repetition_penalty: 1.15,
     // A hard ceiling on how long one 30 s chunk may run. Whisper can get stuck
@@ -330,7 +330,7 @@ async function runTranscribe(
     });
   } catch (err) {
     // A failed load must not be cached, or every later attempt fails too. A
-    // model that loaded fine and then hit a bad clip is worth keeping — it
+    // model that loaded fine and then hit a bad clip is worth keeping; it
     // takes seconds to load and the next recording will want it.
     asrCache.delete(repo);
     const message = err instanceof Error ? err.message : String(err);

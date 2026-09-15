@@ -1,5 +1,5 @@
 // What IndexedDB is used for: remembering the choices that should outlive a
-// restart. The folder is the reason it exists at all — directory handles cannot
+// restart. The folder is the reason it exists at all; directory handles cannot
 // be stringified, so localStorage is out. One key, no schema.
 //
 // A 'language' key also sits in this store on anyone who ran 0.3.1 to 0.5.0.
@@ -24,8 +24,8 @@ function tx<T>(mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRequest<
       new Promise<T>((resolve, reject) => {
         const req = run(db.transaction(STORE, mode).objectStore(STORE));
         // Every call opens its own connection, so every call has to give it
-        // back. close() does not cut the transaction short — it marks the
-        // connection to shut once the transaction finishes — so it is safe to
+        // back. close() does not cut the transaction short; it marks the
+        // connection to shut once the transaction finishes; so it is safe to
         // ask for here rather than tracking the transaction separately.
         req.onsuccess = () => {
           db.close();
