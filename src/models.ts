@@ -53,6 +53,28 @@ export function modelById(id: string | null): ModelInfo {
   return MODELS.find((m) => m.id === id) ?? MODELS[0];
 }
 
+/**
+ * The right model for this machine, decided once, silently.
+ *
+ * Blab ships with all three models installed, so nobody has to choose. This
+ * picks a sensible default so the first recording is already transcribed at
+ * a good speed/accuracy balance:
+ *
+ * - Apple Silicon (and any other arm64 machine) gets Best. Whisper medium is
+ *   slow on CPU, but an M-series runs it at respectable speed.
+ * - A modern laptop (8 cores or more, at least 8 GB) gets Balanced.
+ * - Everything else gets Fast, which is the right answer on an older CPU.
+ *
+ * The picker stays available: this is a first-run default, not a limit.
+ */
+export function suggestedModel(): ModelId {
+  const device = window.blab?.device;
+  if (device?.arch === "arm64") return "medium";
+  const cores = navigator.hardwareConcurrency || 4;
+  const memory = navigator.deviceMemory ?? 16;
+  return cores >= 8 && memory >= 8 ? "small" : "base";
+}
+
 // ------------------------------------------------------------------ settings
 //
 // Plain strings, so localStorage is enough; the handles store (src/store.ts)

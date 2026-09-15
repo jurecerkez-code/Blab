@@ -23,8 +23,11 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('The model picker lists the catalog and remembers the choice', async ({ page }) => {
-  // A real folder to connect, standing in for the directory picker.
+  // A real folder to connect, standing in for the directory picker. The
+  // machine-based first-run default is pinned to base so the test is stable
+  // no matter what laptop it runs on.
   await page.addInitScript(() => {
+    localStorage.setItem('blab-model', 'base');
     (window as unknown as Record<string, unknown>).showDirectoryPicker = async () =>
       navigator.storage.getDirectory();
   });
@@ -44,6 +47,26 @@ test('The model picker lists the catalog and remembers the choice', async ({ pag
   expect(await page.evaluate(() => localStorage.getItem('blab-capture-system'))).toBe('on');
   await page.reload();
   await expect(page.locator('#meeting')).toBeChecked();
+});
+
+test('The first-run default follows the machine', async ({ page }) => {
+  const seen = await page.evaluate(async () => {
+    const { suggestedModel } = await import('/src/models.ts');
+    window.blab = {
+      device: { platform: 'darwin', arch: 'arm64' },
+    } as unknown as typeof window.blab;
+    const onSilicon = suggestedModel();
+    window.blab = {
+      device: { platform: 'win32', arch: 'x64' },
+    } as unknown as typeof window.blab;
+    navigator.hardwareConcurrency; // force the read path used below
+    const onDesktop = suggestedModel();
+    return { onSilicon, onDesktop };
+  });
+  // Apple Silicon always gets the best model; x64 gets small only when the
+  // machine looks modern (cores check), otherwise base.
+  expect(seen.onSilicon).toBe('medium');
+  expect(['small', 'base']).toContain(seen.onDesktop);
 });
 
 test('Importing puts the file in a recording folder under its own format', async ({ page }) => {
