@@ -1,11 +1,13 @@
 import './style.css';
 import { decodeForWhisper } from './audio';
 import { type Scored, highlights, sentences } from './highlights';
+import { LiveCaptions } from './live-captions';
 import { Meter } from './meter';
+import { MODELS, modelById, savedModel, saveModel, savedSystemCapture, saveSystemCapture, type ModelId } from './models';
 import { NoteClock } from './notes';
 import { Recorder, formatDuration } from './recorder';
 import { forgetRoot, recallRoot, rememberRoot } from './store';
-import { type Line, parse, render, stamp } from './timeline';
+import { type Line, parse, render, stamp, toSrt, toVtt } from './timeline';
 import { ModelMissingError, Transcriber } from './transcriber';
 import {
   AUDIO,
@@ -14,13 +16,15 @@ import {
   type Recording,
   createRecordingDir,
   ensureAccess,
+  findAudio,
+  importAudio,
   listRecordings,
   pickRoot,
   repoAround,
-  readFile,
   readText,
   saveAs,
   write,
+  writeAtomic,
 } from './vault';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -37,6 +41,11 @@ const ui = {
   timer: $('timer'),
   meter: $('meter'),
   notes: $<HTMLTextAreaElement>('notes'),
+  model: $<HTMLSelectElement>('model'),
+  meeting: $<HTMLInputElement>('meeting'),
+  captions: $('captions'),
+  importBtn: $<HTMLButtonElement>('import'),
+  importFile: $<HTMLInputElement>('import-file'),
   status: $('status'),
   micSettings: $<HTMLButtonElement>('mic-settings'),
   library: $('library'),
@@ -61,6 +70,14 @@ let recorded = 0;
 let ticker: number | undefined;
 /** Object URL for the audio player in the detail panel. Revoked on switch. */
 let audioUrl: string | null = null;
+/** The keyboard handler the detail panel installed; removed when it closes. */
+let playerKeys: ((e: KeyboardEvent) => void) | null = null;
+
+const captions = new LiveCaptions(ui.captions, (audio, at) => {
+  transcriber.live(audio, savedModel(), at, (text, atTime) => {
+    if (text) captions.show(text, atTime, formatDuration);
+  });
+});
 
 function say(message: string, isError = false, offerMicSettings = false): void {
   ui.status.textContent = message;
@@ -96,6 +113,7 @@ async function connect(handle: FileSystemDirectoryHandle, prompt: boolean): Prom
   ui.library.classList.remove('hidden');
   closeDetail();
   await refreshList();
+  await refreshModelOptions();
   say(
     recordings.length
       ? `Using ${handle.name}. Type a title and press Record.`
@@ -118,6 +136,66 @@ async function choose(): Promise<void> {
     }
   }
 }
+
+// ---------------------------------------------------------------- model
+
+async function modelInstalled(repo: string): Promise<boolean> {
+  try {
+    const r = await fetch(`models/${repo}/onnx/encoder_model_quantized.onnx`, { method: 'HEAD' });
+    return (
+      r.ok &&
+      !(r.headers.get('content-type') ?? '').includes('text/html') &&
+      Number(r.headers.get('content-length')) > 1_000_000
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Fills the model picker with what setup actually installed. */
+async function refreshModelOptions(): Promise<void> {
+  ui.model.replaceChildren();
+  for (const m of MODELS) {
+    const opt = document.createElement('option');
+    opt.value = m.id;
+    opt.textContent = (await modelInstalled(m.repo))
+      ? `${m.label} — ${m.hint}`
+      : `${m.label} — ${m.hint} (not installed — run npm run setup ${m.id === 'base' ? '' : m.id})`;
+    ui.model.append(opt);
+  }
+  ui.model.value = savedModel();
+}
+
+ui.model.addEventListener('change', () => {
+  const m = modelById(ui.model.value as ModelId);
+  saveModel(m.id);
+  say(`Transcribing with the ${m.label.toLowerCase()} model.`);
+});
+
+ui.meeting.addEventListener('change', () => {
+  saveSystemCapture(ui.meeting.checked);
+  say(ui.meeting.checked ? 'Computer audio will be recorded too.' : 'Microphone only.');
+});
+
+// ---------------------------------------------------------------- import
+
+ui.importBtn.addEventListener('click', () => ui.importFile.click());
+ui.importFile.addEventListener('change', async () => {
+  const file = ui.importFile.files?.[0];
+  ui.importFile.value = '';
+  if (!file || !root) return;
+  try {
+    const dir = await importAudio(root, file, file.name, new Date(file.lastModified ?? Date.now()));
+    say(`Imported ${file.name}. Transcribing on this machine…`);
+    await refreshList();
+    const rec = recordings.find((r) => r.dir === dir);
+    if (rec) await open(rec);
+    const handle = await root.getDirectoryHandle(dir);
+    await transcribeInto(handle, dir);
+  } catch (err) {
+    say(`Could not import that file: ${(err as Error).message}`, true);
+  }
+});
 
 // ---------------------------------------------------------------- list
 
@@ -156,8 +234,33 @@ function closeDetail(): void {
   selected = null;
   if (audioUrl) URL.revokeObjectURL(audioUrl);
   audioUrl = null;
+  if (playerKeys) {
+    window.removeEventListener('keydown', playerKeys);
+    playerKeys = null;
+  }
   ui.detail.replaceChildren();
   ui.detail.classList.add('hidden');
+}
+
+function installPlayerKeys(player: HTMLAudioElement): void {
+  playerKeys = (e) => {
+    const t = e.target as HTMLElement | null;
+    if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.tagName === 'SELECT')) return;
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (player.paused) void player.play();
+      else player.pause();
+    } else if (e.key === 'ArrowLeft') {
+      player.currentTime = Math.max(0, player.currentTime - 5);
+    } else if (e.key === 'ArrowRight') {
+      player.currentTime = Math.min(player.duration || Infinity, player.currentTime + 5);
+    } else if (e.key === 'ArrowUp') {
+      player.currentTime = Math.min(player.duration || Infinity, player.currentTime + 30);
+    } else if (e.key === 'ArrowDown') {
+      player.currentTime = Math.max(0, player.currentTime - 30);
+    }
+  };
+  window.addEventListener('keydown', playerKeys);
 }
 
 async function open(rec: Recording): Promise<void> {
@@ -184,10 +287,10 @@ async function open(rec: Recording): Promise<void> {
     return;
   }
 
-  const [notes, transcript, audio] = await Promise.all([
+  const [notes, transcript, audioFile] = await Promise.all([
     readText(dir, NOTES),
     readText(dir, TRANSCRIPT),
-    readFile(dir, AUDIO),
+    findAudio(dir),
   ]);
 
   const heading = document.createElement('h3');
@@ -195,12 +298,32 @@ async function open(rec: Recording): Promise<void> {
   ui.detail.append(heading);
 
   let seek: ((ms: number) => void) | null = null;
-  if (audio) {
+  if (audioFile) {
+    const audio = await audioFile.handle.getFile();
     audioUrl = URL.createObjectURL(audio);
+    const playerRow = document.createElement('div');
+    playerRow.className = 'row';
     const player = document.createElement('audio');
     player.controls = true;
     player.src = audioUrl;
-    ui.detail.append(player);
+    playerRow.append(player);
+    const speed = document.createElement('select');
+    speed.className = 'speed';
+    speed.title = 'Playback speed';
+    speed.setAttribute('aria-label', 'Playback speed');
+    for (const v of ['0.5', '0.75', '1', '1.25', '1.5', '2']) {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = v + '×';
+      speed.append(opt);
+    }
+    speed.value = '1';
+    speed.addEventListener('change', () => {
+      player.playbackRate = Number(speed.value);
+    });
+    playerRow.append(speed);
+    ui.detail.append(playerRow);
+    installPlayerKeys(player);
     seek = (ms) => {
       player.currentTime = ms / 1000;
       void player.play();
@@ -259,7 +382,7 @@ function actions(
   transcript: string | null,
 ): HTMLDivElement {
   const bar = document.createElement('div');
-  bar.className = 'row';
+  bar.className = 'row wrap';
 
   const copy = document.createElement('button');
   copy.textContent = 'Copy all';
@@ -282,6 +405,15 @@ function actions(
       asPlainText(asOneBlock(rec, view, notes, transcript)),
     ),
   );
+
+  // Subtitles are the transcript with the times kept, so they only exist for
+  // recordings whose transcript carries times.
+  if (view.timedScript) {
+    bar.append(
+      exportButton('Save .srt', `${rec.dir}.srt`, 'application/x-subrip', () => toSrt(view.timedScript!)),
+      exportButton('Save .vtt', `${rec.dir}.vtt`, 'text/vtt', () => toVtt(view.timedScript!)),
+    );
+  }
 
   // Only shown when a recording never got its transcript — usually because the
   // model was not set up yet at the time.
@@ -480,7 +612,10 @@ async function microphoneReady(): Promise<boolean> {
 async function startRecording(): Promise<void> {
   if (!(await microphoneReady())) return;
   try {
-    await recorder.start();
+    await recorder.start({
+      captureSystem: ui.meeting.checked,
+      onSystemWarning: (m) => say(m, true),
+    });
   } catch (err) {
     const name = (err as DOMException)?.name;
     say(
@@ -499,7 +634,10 @@ async function startRecording(): Promise<void> {
   window.blab?.setRecording(true);
 
   const stream = recorder.mediaStream;
-  if (stream) await meter.start(stream);
+  if (stream) {
+    await meter.start(stream);
+    await captions.start(stream, () => recordedMs());
+  }
 
   startedAt = Date.now();
   recorded = 0;
@@ -512,6 +650,8 @@ async function startRecording(): Promise<void> {
   ui.pause.textContent = 'Pause';
   ui.pause.classList.remove('hidden');
   ui.title.disabled = true;
+  ui.model.disabled = true;
+  ui.meeting.disabled = true;
   say('Recording. Type your notes as you listen.');
 }
 
@@ -529,7 +669,11 @@ async function togglePause(): Promise<void> {
     // A fresh meter on the same stream; the old one released its audio device
     // when we paused.
     const stream = recorder.mediaStream;
-    if (stream) await meter.start(stream);
+    if (stream) {
+      await meter.start(stream);
+      // The captions' capture also died with the pause; restart it too.
+      await captions.start(stream, () => recordedMs());
+    }
     ui.pause.textContent = 'Pause';
     ui.timer.classList.add('live');
     ui.record.classList.add('is-recording');
@@ -543,6 +687,7 @@ async function togglePause(): Promise<void> {
   tick();
   // Flat bars while paused, which is the truth: nothing is being captured.
   meter.stop();
+  captions.stop();
   ui.pause.textContent = 'Resume';
   ui.timer.classList.remove('live');
   ui.record.classList.remove('is-recording');
@@ -555,6 +700,7 @@ async function stopRecording(): Promise<void> {
   // Before recorder.stop(), so the meter lets go of the stream while it is
   // still alive rather than reading a track that is already ending.
   meter.stop();
+  captions.stop();
   ui.timer.classList.remove('live');
   ui.record.disabled = true;
   ui.record.textContent = 'Record';
@@ -566,6 +712,9 @@ async function stopRecording(): Promise<void> {
     // that refused to stop took the finally down with it and left Record
     // disabled for good — the one failure that needs the button most.
     const audio = await recorder.stop();
+    // The recorder noticed a quiet system capture; say so while the people
+    // who just recorded a meeting can still do something about it.
+    for (const warning of recorder.warnings) say(warning, true);
     // Each line goes to disk with the moment it was typed in front of it, so
     // the notes and the transcript end up on one time axis.
     const notes = noteClock.render(ui.notes.value);
@@ -588,6 +737,8 @@ async function stopRecording(): Promise<void> {
     window.blab?.setRecording(false);
     ui.record.disabled = false;
     ui.title.disabled = false;
+    ui.model.disabled = false;
+    ui.meeting.disabled = false;
   }
 
   // The audio and notes are already on disk, so a transcription problem from
@@ -597,20 +748,36 @@ async function stopRecording(): Promise<void> {
 
 async function transcribeInto(dir: FileSystemDirectoryHandle, name: string): Promise<void> {
   try {
-    const audio = await readFile(dir, AUDIO);
-    if (!audio) throw new Error(`No ${AUDIO} in ${name}.`);
+    const audioFile = await findAudio(dir);
+    if (!audioFile) throw new Error(`No audio in ${name}.`);
+    const audio = await audioFile.handle.getFile();
 
     say('Reading the audio…');
     const samples = await decodeForWhisper(audio);
 
-    const result = await transcriber.transcribe(samples, (p) => {
-      if (p.stage === 'loading') return say('Starting Whisper on this machine…');
-      say(
-        p.total > 1
-          ? `Transcribing on this machine — part ${Math.max(p.done, 1)} of ${p.total}.`
-          : 'Transcribing on this machine…',
-      );
-    });
+    const model = savedModel();
+    // The transcript is written as it comes, so a crash mid-run costs nothing
+    // more than the last few chunks. The timed version replaces it at the end.
+    const result = await transcriber.transcribe(
+      samples,
+      model,
+      (p) => {
+        if (p.stage === 'loading') return say('Starting Whisper on this machine…');
+        say(
+          p.total > 1
+            ? `Transcribing on this machine — part ${Math.max(p.done, 1)} of ${p.total}.`
+            : 'Transcribing on this machine…',
+        );
+      },
+      (text) => {
+        if (text) void writeAtomic(dir, TRANSCRIPT, text).catch(() => {});
+      },
+    );
+
+    if (result.noSpeech) {
+      say('No speech found in the recording, so nothing was transcribed.');
+      return;
+    }
 
     // One line per phrase, each with the second it was said at. Whisper hands
     // the times over as part of the same generation, so this costs nothing and
@@ -620,7 +787,7 @@ async function transcribeInto(dir: FileSystemDirectoryHandle, name: string): Pro
     // has lost any of them the plain text goes to disk instead, and a talk you
     // cannot click beats a talk that is missing its last two minutes.
     const timed = render(result.segments);
-    await write(dir, TRANSCRIPT, keptEverything(timed, result.text) ? timed : result.text);
+    await writeAtomic(dir, TRANSCRIPT, keptEverything(timed, result.text) ? timed : result.text);
     // Saved either way. A transcript that is mostly Whisper talking to itself is
     // still the only record of that talk, and deleting it would be the app
     // deciding something it cannot know. Saying so is the whole fix: the failure
@@ -703,6 +870,7 @@ ui.pickFolder.addEventListener('click', () => void choose());
 ui.setupPick.addEventListener('click', () => void setupPickClicked());
 
 async function boot(): Promise<void> {
+  ui.meeting.checked = savedSystemCapture();
   if (!('showDirectoryPicker' in window)) {
     ui.setup.classList.remove('hidden');
     ui.setupPick.disabled = true;

@@ -22,14 +22,23 @@
 
       <section id="recorder" class="card hidden">
         <input id="title" type="text" placeholder="What is this talk?" autocomplete="off" />
+        <label class="check" title="Adds what the computer is playing, so the other side of a call is recorded too.">
+          <input id="meeting" type="checkbox" />
+          Record computer audio too
+        </label>
         <div class="row">
           <button id="record" class="record">Record</button>
           <!-- Only useful mid-recording, so it stays out of the way until then. -->
           <button id="pause" class="ghost hidden">Pause</button>
           <span id="timer" class="timer">00:00</span>
+          <span class="spacer"></span>
+          <label class="pick" for="model">Model</label>
+          <select id="model" aria-label="Transcription model"></select>
         </div>
         <!-- Decorative: the status line already says the same in words. -->
         <div id="meter" class="meter" aria-hidden="true"></div>
+        <!-- Live captions land here; they are previews, never the transcript. -->
+        <div id="captions" class="captions"></div>
         <textarea id="notes" placeholder="Your notes. Type while it records."></textarea>
       </section>
 
@@ -38,7 +47,12 @@
       <button id="mic-settings" class="ghost hidden">Open microphone settings</button>
 
       <section id="library" class="hidden">
-        <h2>Recordings</h2>
+        <div class="library-head">
+          <h2>Recordings</h2>
+          <button id="import" class="ghost">Import audio…</button>
+          <input id="import-file" type="file" hidden
+            accept="audio/*,.mp4,.m4v,.mov,.aac,.m4b" />
+        </div>
         <ul id="list"></ul>
         <p id="empty" class="muted">
           Nothing yet. Type a title above and press Record — Blab makes a folder

@@ -4,6 +4,7 @@
 const {
   app,
   BrowserWindow,
+  desktopCapturer,
   dialog,
   ipcMain,
   net,
@@ -277,6 +278,22 @@ function allowLocalPermissions() {
     rememberGrant(details);
     return ALLOWED.has(permission);
   });
+  // Meeting capture asks for the computer's audio, never for a picker: the
+  // handler answers with the primary screen's audio loopback so the user is
+  // not choosing a capture target in the middle of a call. "loopback" is
+  // system audio on Windows and Linux; macOS needs "systemsound" plus the
+  // Screen Recording permission, and a silent result is detected at Stop and
+  // reported by the recorder.
+  ses.setDisplayMediaRequestHandler((_request, callback) => {
+    desktopCapturer
+      .getSources({ types: ['screen', 'window'], thumbnailSize: { width: 1, height: 1 } })
+      .then((sources) => {
+        const screen = sources.find((s) => s.id.startsWith('screen')) ?? sources[0];
+        if (!screen) return callback({});
+        callback({ video: screen, audio: process.platform === 'darwin' ? 'systemsound' : 'loopback' });
+      })
+      .catch(() => callback({}));
+  });
   // Blab talks to no USB, HID or serial device. Saying no to all of them costs
   // nothing and removes the whole class of question.
   ses.setDevicePermissionHandler(() => false);
@@ -383,25 +400,6 @@ function createWindow() {
   win.webContents.on('will-attach-webview', (event) => event.preventDefault());
 }
 
-/**
- * The served path of the installed encoder weights, or null if there are none.
- *
- * Two levels down because models are stored the way HuggingFace names them,
- * `org/model`, and which org and model those are is decided by one constant in
- * src/worker.ts that is meant to be swapped.
- */
-async function findEncoder(root) {
-  for (const org of await readdir(root).catch(() => [])) {
-    for (const model of await readdir(path.join(root, org)).catch(() => [])) {
-      const rel = `/models/${org}/${model}/onnx/encoder_model_quantized.onnx`;
-      if (await stat(path.join(root, org, model, 'onnx', 'encoder_model_quantized.onnx')).then(() => true).catch(() => false)) {
-        return rel;
-      }
-    }
-  }
-  return null;
-}
-
 async function diagnose(win) {
   await new Promise((done) => win.webContents.once('did-finish-load', done));
 
@@ -409,25 +407,52 @@ async function diagnose(win) {
   const assets = await readdir(path.join(DIST, 'assets')).catch(() => []);
   const workerFile = assets.find((n) => /^worker-.*\.js$/.test(n));
 
-  // Likewise the model: this check used to name whisper-base outright, and
-  // swapping the MODEL constant left it reporting a missing file for a model
-  // that was sitting right there. Find whatever setup.mjs actually installed.
-  const encoder = await findEncoder(path.join(DIST, 'models'));
-
   const report = await win.webContents.executeJavaScript(`(async () => {
     const out = { threads: crossOriginIsolated, mic: null, model: null, whisper: null };
 
     try {
       const s = await navigator.mediaDevices.getUserMedia({ audio: true });
-      out.mic = 'ok: ' + (s.getAudioTracks()[0]?.label || 'unnamed device');
+      const label = s.getAudioTracks()[0]?.label || 'unnamed device';
+      // A track that exists is not the same as a microphone that hears. macOS
+      // hands out streams of digital zero when it has never been asked, and a
+      // muted device does the same — record one second and measure it.
+      let level = 'silent';
+      try {
+        const rec = new MediaRecorder(s, { mimeType: 'audio/webm;codecs=opus' });
+        const blob = await new Promise((resolve) => {
+          const parts = [];
+          rec.ondataavailable = (e) => e.data.size && parts.push(e.data);
+          rec.onstop = () => resolve(new Blob(parts, { type: rec.mimeType }));
+          rec.start();
+          setTimeout(() => rec.stop(), 1000);
+        });
+        const buf = await blob.arrayBuffer();
+        const ctx = new OfflineAudioContext(1, 1, 16000);
+        const audio = await ctx.decodeAudioData(buf.slice(0));
+        const data = audio.getChannelData(0);
+        let peak = 0;
+        for (let i = 0; i < data.length; i++) {
+          const v = Math.abs(data[i]);
+          if (v > peak) peak = v;
+        }
+        out.mic =
+          peak < 0.002
+            ? 'FAILED: ' + label + ' produced only silence (muted? blocked?)'
+            : 'ok: ' + label + ' (peak ' + peak.toFixed(3) + ')';
+      } catch (e) {
+        out.mic = 'ok: ' + label + ' (level check skipped: ' + e.message + ')';
+      }
       s.getTracks().forEach((t) => t.stop());
     } catch (e) { out.mic = 'FAILED: ' + e.name + ' ' + e.message; }
 
-    const encoder = ${JSON.stringify(encoder)};
+    // The configured model, when the user has one; the shell's guess otherwise.
+    const modelKey = localStorage.getItem('blab-model');
+    const mods = { base: 'Xenova/whisper-base', small: 'Xenova/whisper-small', medium: 'Xenova/whisper-medium' };
+    const repo = mods[modelKey] || 'Xenova/whisper-base';
+    const encoder = 'models/' + repo + '/onnx/encoder_model_quantized.onnx';
     try {
-      if (!encoder) throw new Error('no model under dist/models — run npm run setup');
       const r = await fetch(encoder, { method: 'HEAD' });
-      out.model = r.ok ? 'ok: ' + encoder + ', ' + r.headers.get('content-length') + ' bytes' : 'FAILED: HTTP ' + r.status;
+      out.model = r.ok ? 'ok: ' + repo + ', ' + r.headers.get('content-length') + ' bytes' : 'FAILED: ' + repo + ' not installed (HTTP ' + r.status + ')';
     } catch (e) { out.model = 'FAILED: ' + e.message; }
 
     // Two seconds of silence through the real worker. Slow, but it exercises
@@ -460,6 +485,7 @@ async function diagnose(win) {
             audio,
             modelPath: new URL('models/', document.baseURI).href,
             ortPath: new URL('ort/', document.baseURI).href,
+            model: localStorage.getItem('blab-model') === 'small' ? 'small' : localStorage.getItem('blab-model') === 'medium' ? 'medium' : 'base',
           }, [audio.buffer]);
         });
         w.terminate();

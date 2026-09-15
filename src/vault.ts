@@ -1,8 +1,76 @@
 // Everything the app knows about disk. A recording is a folder named
 // `YYYY-MM-DD_HHMM_title-slug` holding audio.webm, notes.md and transcript.md.
+// Imported audio keeps its own format (audio.mp3, audio.m4a, …) so nothing is
+// re-encoded; the reader below finds whatever `audio.*` is actually there.
 export const AUDIO = 'audio.webm';
 export const NOTES = 'notes.md';
 export const TRANSCRIPT = 'transcript.md';
+
+/** Formats Blab writes, plus the ones it accepts from the Import button. */
+export const AUDIO_SUFFIXES = ['webm', 'mp3', 'm4a', 'wav', 'ogg', 'flac', 'opus', 'aac', 'm4b', 'mp4'];
+
+/** The recording's audio file, whatever its format. Prefers what we write. */
+export async function findAudio(
+  dir: FileSystemDirectoryHandle,
+): Promise<{ name: string; handle: FileSystemFileHandle } | null> {
+  for await (const entry of dir.values()) {
+    if (entry.kind !== 'file') continue;
+    if (!entry.name.startsWith('audio.')) continue;
+    const ext = entry.name.slice('audio.'.length).toLowerCase();
+    if (ext === 'webm' || AUDIO_SUFFIXES.includes(ext)) {
+      return { name: entry.name, handle: entry as FileSystemFileHandle };
+    }
+  }
+  return null;
+}
+
+/**
+ * Puts an imported file into a fresh recording folder. The file is copied
+ * byte-for-byte — decoders, not re-encoders, are the point of importing.
+ * Returns the folder name so the caller can transcribe it the usual way.
+ */
+export async function importAudio(
+  root: FileSystemDirectoryHandle,
+  file: File,
+  title: string,
+  when: Date,
+): Promise<string> {
+  const dot = file.name.lastIndexOf('.');
+  const ext = dot >= 0 ? file.name.slice(dot + 1).toLowerCase() : 'webm';
+  const { dir, handle } = await createRecordingDir(root, title || file.name, when);
+  if (ext === 'webm') {
+    await write(handle, AUDIO, file);
+  } else {
+    await write(handle, `audio.${ext}`, file);
+  }
+  return dir;
+}
+
+/**
+ * Writes a file in a way a crash cannot corrupt: write the whole thing under
+ * a temporary name, then move it over the real one. FileSystemFileHandle.move
+ * is a rename on the same volume, so it is atomic in practice.
+ */
+export async function writeAtomic(
+  dir: FileSystemDirectoryHandle,
+  name: string,
+  data: Blob | string,
+): Promise<void> {
+  const part = `${name}.part`;
+  await write(dir, part, data);
+  try {
+    const file = await dir.getFileHandle(part);
+    // move() is Chromium 112+; the TS lib is a step behind, hence the cast.
+    await (file as unknown as { move(to: string): Promise<void> }).move(name);
+  } catch {
+    // A filesystem without move(): take the tiny risk rather than no save at
+    // all — the caller's text is safe in memory either way.
+    const file = await dir.getFileHandle(name, { create: true });
+    const stream = await file.createWritable();
+    await stream.write(data);
+    await stream.close();
+  }
+}
 
 const DIR_PATTERN = /^(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})_(.+)$/;
 

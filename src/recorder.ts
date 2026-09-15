@@ -1,14 +1,68 @@
-// Thin wrapper over MediaRecorder. Holds the mic open for one recording only.
+// Thin wrapper over MediaRecorder. Holds the mic open for one recording only,
+// and — when asked — a second capture of whatever the computer is playing so
+// the other side of a call is in the file too.
 const MIME_CANDIDATES = ['audio/webm;codecs=opus', 'audio/webm'];
 
 function pickMime(): string | undefined {
   return MIME_CANDIDATES.find((m) => MediaRecorder.isTypeSupported(m));
 }
 
+export type RecorderOptions = {
+  /** Also record what the computer is playing (meeting capture). */
+  captureSystem?: boolean;
+  /** Called with a plain-language notice when system capture degrades. */
+  onSystemWarning?: (message: string) => void;
+};
+
+/** Peak amplitude (0-1) of whatever source it is attached to, sampled coarsely. */
+class LevelProbe {
+  private analyser: AnalyserNode | null = null;
+  private data = new Uint8Array(0);
+  private peakValue = 0;
+  private timer: number | undefined;
+
+  attach(ctx: AudioContext, source: AudioNode): void {
+    this.analyser = ctx.createAnalyser();
+    this.analyser.fftSize = 512;
+    this.data = new Uint8Array(this.analyser.frequencyBinCount);
+    source.connect(this.analyser);
+    const sample = () => {
+      if (!this.analyser) return;
+      this.analyser.getByteTimeDomainData(this.data);
+      let p = 0;
+      for (let i = 0; i < this.data.length; i++) {
+        const v = (this.data[i] - 128) / 128;
+        if (v * v > p) p = v * v;
+      }
+      this.peakValue = Math.max(this.peakValue, Math.sqrt(p));
+      this.timer = window.setTimeout(sample, 500);
+    };
+    sample();
+  }
+
+  detach(): void {
+    if (this.timer !== undefined) window.clearTimeout(this.timer);
+    this.timer = undefined;
+    this.analyser?.disconnect();
+    this.analyser = null;
+  }
+
+  get peak(): number {
+    return this.peakValue;
+  }
+}
+
 export class Recorder {
   private recorder: MediaRecorder | null = null;
   private stream: MediaStream | null = null;
+  private system: MediaStream | null = null;
   private chunks: Blob[] = [];
+  private mix: { ctx: AudioContext; dest: MediaStreamAudioDestinationNode } | null = null;
+  private systemProbe = new LevelProbe();
+  /** Human-scale notice for whatever went sideways; read after stop(). */
+  warnings: string[] = [];
+  /** True when system audio was wanted but the machine stayed silent. */
+  gotQuietSystem = false;
 
   get active(): boolean {
     return this.recorder !== null;
@@ -18,13 +72,19 @@ export class Recorder {
     return this.recorder?.state === 'paused';
   }
 
-  /** The live stream, so a meter can watch it without opening the mic again. */
+  /** The live mic stream, so a meter can watch it without opening the mic again. */
   get mediaStream(): MediaStream | null {
     return this.stream;
   }
 
-  /** Throws if the browser or the user refuses the mic. */
-  async start(): Promise<void> {
+  /**
+   * Throws if the browser or the user refuses the mic. A system-capture
+   * failure never throws — the recording carries on on the mic alone, with a
+   * warning the caller can pass on.
+   */
+  async start({ captureSystem = false, onSystemWarning }: RecorderOptions = {}): Promise<void> {
+    this.warnings = [];
+    this.gotQuietSystem = false;
     this.stream = await navigator.mediaDevices.getUserMedia({
       // `audio: true` would take Chromium's defaults, and its defaults are
       // tuned for a voice call: keep a human on the other end comfortable,
@@ -53,8 +113,34 @@ export class Recorder {
       },
     });
     this.chunks = [];
+
+    const ctx = new AudioContext();
+    if (ctx.state === 'suspended') await ctx.resume();
+    const dest = ctx.createMediaStreamDestination();
+    const micSource = ctx.createMediaStreamSource(this.stream);
+    micSource.connect(dest);
+
+    if (captureSystem) {
+      try {
+        const got = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        // The video half was only asked for because getDisplayMedia insists;
+        // the audio track is the point of meeting capture.
+        got.getVideoTracks().forEach((t) => t.stop());
+        this.system = new MediaStream(got.getAudioTracks());
+        const sysSource = ctx.createMediaStreamSource(this.system);
+        sysSource.connect(dest);
+        this.systemProbe.attach(ctx, sysSource);
+      } catch (err) {
+        this.system = null;
+        onSystemWarning?.(
+          `Could not capture computer audio (${(err as Error).message}) — recording the microphone only.`,
+        );
+      }
+    }
+
+    this.mix = { ctx, dest };
     const mimeType = pickMime();
-    this.recorder = new MediaRecorder(this.stream, mimeType ? { mimeType } : undefined);
+    this.recorder = new MediaRecorder(dest.stream, mimeType ? { mimeType } : undefined);
     this.recorder.ondataavailable = (e) => {
       if (e.data.size > 0) this.chunks.push(e.data);
     };
@@ -84,13 +170,26 @@ export class Recorder {
       recorder.onstop = () => resolve(new Blob(this.chunks, { type: recorder.mimeType || 'audio/webm' }));
       recorder.stop();
     });
+    this.gotQuietSystem = Boolean(this.system) && this.systemProbe.peak < 0.02;
+    if (this.gotQuietSystem) {
+      this.warnings.push(
+        'No computer audio was heard. On a Mac, allow Screen Recording for Blab in System Settings; on Windows check that no other app is using the loopback device.',
+      );
+    }
     this.release();
     return blob;
   }
 
   private release(): void {
+    this.systemProbe.detach();
+    // The mixer keeps the audio device open after the recorder stops, so it
+    // gets closed first: Chromium sees the tracks end and releases the device.
+    this.mix?.ctx.close().catch(() => {});
+    this.mix = null;
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
+    this.system?.getTracks().forEach((t) => t.stop());
+    this.system = null;
     this.recorder = null;
     this.chunks = [];
   }

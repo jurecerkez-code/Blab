@@ -1,8 +1,17 @@
 // The one network moment. Run once: `npm run setup`.
-// Pulls the Whisper model into public/models and the onnxruntime wasm binaries
+// Pulls the Whisper models into public/models and the onnxruntime wasm binaries
 // into public/ort. After this, Blab never touches the network again.
+//
+//   npm run setup            the default "fast" model (whisper-base)
+//   npm run setup small      add the better "balanced" model
+//   npm run setup medium     add the best, slowest model
+//   npm run setup all        every model
+//   npm run setup clean      back to the default model alone
+//
+// Models accumulate: switching models in the app is a runtime choice, so the
+// setup keeps everything it has ever fetched until told to clean.
 import { createWriteStream } from 'node:fs';
-import { copyFile, mkdir, readdir, readFile, rm, stat } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, rm, stat } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { dirname, join, resolve } from 'node:path';
@@ -11,20 +20,21 @@ import { fileURLToPath } from 'node:url';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const HOST = 'https://huggingface.co';
 
-// Every file below lives on someone else's server, and one day someone else
-// will move it. The same files are attached to a Blab release that never
-// changes, so a dead upstream URL costs a retry instead of the whole app.
-// Only whisper-base is mirrored; swap MODEL and you are back to one source.
-const MIRROR_MODEL = 'Xenova/whisper-base';
+// The models the app can run, by the name the picker uses. Only whisper-base
+// is on the Blab mirror; the others come from HuggingFace (still one fetch,
+// still cached forever after).
+const MODELS = {
+  base: 'Xenova/whisper-base',
+  small: 'Xenova/whisper-small',
+  medium: 'Xenova/whisper-medium',
+};
+const MIRROR_MODEL = MODELS.base;
 const MIRROR = 'https://github.com/jurecerkez-code/Blab/releases/download/model-mirror';
 
-// Read the model out of the worker rather than repeating it here, so switching
-// to whisper-tiny is a one-line change that cannot fall out of step.
-const WORKER = join(ROOT, 'src', 'worker.ts');
-const MODEL = /^const MODEL = '([^']+)'/m.exec(await readFile(WORKER, 'utf8'))?.[1];
-if (!MODEL) throw new Error(`Could not find the MODEL constant in ${WORKER}.`);
+// The small voice-activity detector that lets transcription skip silence.
+const VAD = { org: 'onnx-community', model: 'silero-vad', file: 'onnx/model_quantized.onnx' };
 
-// Matches the worker: device 'wasm' + dtype 'q8' -> the "_quantized" weights.
+// Same set for every whisper model: transformers.js loads exactly these.
 const MODEL_FILES = [
   'config.json',
   'generation_config.json',
@@ -44,6 +54,17 @@ const ORT_FILES = [
   'ort-wasm-simd-threaded.jsep.mjs',
 ];
 
+const want = process.argv.slice(2).join(' ').toLowerCase();
+const names = Object.keys(MODELS);
+let toFetch;
+if (want === 'all') toFetch = names;
+else if (want === 'clean') toFetch = [];
+else {
+  const pick = names.find((n) => want.includes(n));
+  if (!pick) throw new Error(`Unknown model "${process.argv.slice(2).join(' ')}". Use: ${names.join(', ')}, all or clean.`);
+  toFetch = [pick];
+}
+
 const mb = (bytes) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
 async function sizeOf(path) {
@@ -55,9 +76,9 @@ async function sizeOf(path) {
 }
 
 /** Tries HuggingFace, then the Blab mirror. Returns the first one that answers. */
-async function open(remote) {
-  const sources = [`${HOST}/${MODEL}/resolve/main/${remote}`];
-  if (MODEL === MIRROR_MODEL) sources.push(`${MIRROR}/${remote.split('/').pop()}`);
+async function open(remote, model) {
+  const sources = [`${HOST}/${model}/resolve/main/${remote}`];
+  if (model === MIRROR_MODEL) sources.push(`${MIRROR}/${remote.split('/').pop()}`);
 
   let last = 'no sources';
   for (const url of sources) {
@@ -72,8 +93,8 @@ async function open(remote) {
   throw new Error(`${remote} could not be fetched from any source (${last})`);
 }
 
-async function download(remote, local) {
-  const res = await open(remote);
+async function download(remote, model, local) {
+  const res = await open(remote, model);
   const expected = Number(res.headers.get('content-length')) || 0;
 
   await mkdir(dirname(local), { recursive: true });
@@ -114,59 +135,70 @@ async function copyOrt() {
   return bytes;
 }
 
-/**
- * Deletes any model that is not the one MODEL names.
- *
- * Swapping MODEL leaves the old weights sitting in public/models, and nothing
- * downstream notices: electron-builder copies the whole folder, so the
- * installer quietly grows by the size of a model nobody loads. Swapping
- * whisper-base for whisper-base.en put 151 MB there where 75 belonged, and the
- * README invites exactly this swap ("Want it faster? Change one line").
- *
- * Only ever removes things under public/models, which this script owns and can
- * refetch — the folder is in .gitignore precisely because it is derived.
- */
-async function dropOtherModels() {
-  const root = join(ROOT, 'public', 'models');
-  const keep = join(root, ...MODEL.split('/'));
-  for (const org of await readdir(root, { withFileTypes: true }).catch(() => [])) {
-    if (!org.isDirectory()) continue;
-    for (const name of await readdir(join(root, org.name), { withFileTypes: true }).catch(() => [])) {
-      const path = join(root, org.name, name.name);
-      if (!name.isDirectory() || path === keep) continue;
-      await rm(path, { recursive: true, force: true });
-      console.log(`  removed ${org.name}/${name.name} (not the model in use)`);
-    }
-  }
-}
-
-async function fetchModel() {
-  const to = join(ROOT, 'public', 'models', ...MODEL.split('/'));
+async function fetchModel(name) {
+  const model = MODELS[name];
+  const to = join(ROOT, 'public', 'models', ...model.split('/'));
   let bytes = 0;
-  for (const name of MODEL_FILES) {
-    const target = join(to, name);
+  for (const file of MODEL_FILES) {
+    const target = join(to, file);
     const have = await sizeOf(target);
     if (have > 0) {
-      console.log(`  have    ${name}`);
+      console.log(`  have    ${model}/${file}`);
       bytes += have;
       continue;
     }
-    process.stdout.write(`  get     ${name} … `);
-    const got = await download(name, target);
+    process.stdout.write(`  get     ${model}/${file} … `);
+    const got = await download(file, model, target);
     console.log(mb(got));
     bytes += got;
   }
   return bytes;
 }
 
+async function fetchVad() {
+  const to = join(ROOT, 'public', 'models', VAD.org, VAD.model, VAD.file);
+  const have = await sizeOf(to);
+  if (have > 0) {
+    console.log(`  have    ${VAD.org}/${VAD.model}/${VAD.file}`);
+    return 0;
+  }
+  const got = await download(VAD.file, `${VAD.org}/${VAD.model}`, to);
+  console.log(`  get     ${VAD.org}/${VAD.model}/${VAD.file}  ${mb(got)}`);
+  return got;
+}
+
+async function dropOtherModels(keep) {
+  const root = join(ROOT, 'public', 'models');
+  for (const org of await readdir(root, { withFileTypes: true }).catch(() => [])) {
+    if (!org.isDirectory()) continue;
+    for (const name of await readdir(join(root, org.name), { withFileTypes: true }).catch(() => [])) {
+      const path = join(root, org.name, name.name);
+      if (!name.isDirectory() || keep.includes(`${org.name}/${name.name}`)) continue;
+      await rm(path, { recursive: true, force: true });
+      console.log(`  removed ${org.name}/${name.name}`);
+    }
+  }
+}
+
 console.log(`\nonnxruntime wasm -> public/ort`);
 const ortBytes = await copyOrt();
 
-console.log(`\n${MODEL} -> public/models`);
-const modelBytes = await fetchModel();
-await dropOtherModels();
+console.log(`\nsilero voice-activity detector -> public/models`);
+const vadBytes = await fetchVad();
 
-console.log(
-  `\nReady. ${mb(modelBytes)} of model, ${mb(ortBytes)} of runtime, all on disk.` +
-    `\nBlab needs no network from here on. Start it with \`npm run dev\`.\n`,
-);
+if (toFetch.length) {
+  const label = toFetch.length === 1 ? toFetch[0] : toFetch.join(' + ');
+  console.log(`\nwhisper (${label}) -> public/models`);
+} else {
+  console.log(`\ncleaning: removing every model but ${MODELS.base}`);
+}
+let total = 0;
+for (const name of toFetch) {
+  total += await fetchModel(name);
+}
+if (want === 'clean') await dropOtherModels(['Xenova/whisper-base']);
+else if (toFetch.length === names.length) await dropOtherModels([]);
+
+const modelTotal = total === 0 ? 'model files already present' : mb(total);
+console.log(`\nReady. ${modelTotal}, ${mb(ortBytes + vadBytes)} of runtime, all on disk.`);
+console.log('Blab needs no network from here on. Start it with `npm run dev`.');

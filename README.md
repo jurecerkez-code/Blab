@@ -6,7 +6,20 @@ transcript on your own computer.
 No account. No login. No cloud. No API key. No subscription. Nothing leaves
 your machine.
 
-Windows, Mac and Linux. Free. One feature.
+Windows, Mac and Linux. Free. Offline. Your words stay on your machine.
+
+
+## What's new in 0.7
+
+- **Model picker.** Fast (base), Balanced (small) and Best (medium) Whisper models, chosen once in the app. The default is Fast, which stays the right answer on an older laptop. `npm run setup small` and `npm run setup medium` fetch the others once, with internet.
+- **Silence-aware transcription.** A small voice-activity detector (Silero, runs on your machine) finds where the talk actually is, so Whisper only hears speech: faster, and quieter rooms stop turning into loops.
+- **Live captions.** While recording, Blab shows what it is hearing, updated as you talk. They are previews — the saved transcript is still made from the whole file at Stop.
+- **Meeting capture.** Tick "Record computer audio too" and the other side of a call is in the file, mixed with your microphone. On a Mac, System Settings → Privacy & Security → Screen Recording must list Blab.
+- **Import.** Transcribe an audio file that was not recorded in Blab: mp3, m4a, wav, ogg, flac, opus, aac, webm. The file is copied in as it is; nothing is re-encoded.
+- **Subtitle export.** Save .srt and .vtt from any timed transcript.
+- **A player worth reviewing with.** 0.5×–2× speed and keyboard control: Space plays/pauses, ←/→ skip 5 s, ↑/↓ skip 30 s.
+- **Transcripts survive crashes.** The transcript is written to disk as it is produced; the timed version replaces it at the end.
+- **`npm run app:check` now hears.** The check records a second of your microphone and fails on digital silence, not just on a missing device.
 
 ## Download
 
