@@ -26,7 +26,7 @@ export async function findAudio(
 
 /**
  * Puts an imported file into a fresh recording folder. The file is copied
- * byte-for-byte — decoders, not re-encoders, are the point of importing.
+ * byte-for-byte; decoders, not re-encoders, are the point of importing.
  * Returns the folder name so the caller can transcribe it the usual way.
  */
 export async function importAudio(
@@ -64,7 +64,7 @@ export async function writeAtomic(
     await (file as unknown as { move(to: string): Promise<void> }).move(name);
   } catch {
     // A filesystem without move(): take the tiny risk rather than no save at
-    // all — the caller's text is safe in memory either way.
+    // all; the caller's text is safe in memory either way.
     const file = await dir.getFileHandle(name, { create: true });
     const stream = await file.createWritable();
     await stream.write(data);
@@ -75,7 +75,7 @@ export async function writeAtomic(
 const DIR_PATTERN = /^(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})_(.+)$/;
 
 export type Recording = {
-  /** Folder name on disk — also the id we pass around. */
+  /** Folder name on disk; also the id we pass around. */
   dir: string;
   title: string;
   when: Date;
@@ -154,7 +154,7 @@ export async function looksLikeGitCheckout(root: FileSystemDirectoryHandle): Pro
  *
  * Two checks, because neither covers the other. `looksLikeGitCheckout` reads
  * the folder itself and works everywhere, including the browser build, but a
- * directory handle cannot reach its parent — so it only ever catches the top of
+ * directory handle cannot reach its parent; so it only ever catches the top of
  * a checkout, and misses a notes folder three levels inside one. The desktop
  * app can do better: the shell saw where this folder is when access to it was
  * granted, and can climb from there. Where there is no shell to ask, the first
@@ -185,7 +185,7 @@ export async function listRecordings(root: FileSystemDirectoryHandle): Promise<R
     if (rec) found.push(rec);
   }
   // Newest first. Folder names only carry minutes, so two recordings in the
-  // same minute tie — fall back to the name, which sorts the "-2" collision
+  // same minute tie; fall back to the name, which sorts the "-2" collision
   // suffix (the later one) above the original.
   return found.sort(
     (a, b) => b.when.getTime() - a.when.getTime() || b.dir.localeCompare(a.dir),
@@ -225,7 +225,7 @@ export async function write(
 }
 
 /**
- * Writes a copy of a recording somewhere else — a desktop, a shared drive, the
+ * Writes a copy of a recording somewhere else; a desktop, a shared drive, the
  * folder an essay is being written in. Nothing here touches the recording's own
  * folder: this is for the copy you are about to hand to someone.
  *
@@ -264,7 +264,7 @@ export async function saveAs(name: string, text: string, mime: string): Promise<
   return true;
 }
 
-/** Null when the file is not there — a recording may have no transcript yet. */
+/** Null when the file is not there; a recording may have no transcript yet. */
 export async function readFile(dir: FileSystemDirectoryHandle, name: string): Promise<File | null> {
   try {
     return await (await dir.getFileHandle(name)).getFile();

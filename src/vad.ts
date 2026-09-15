@@ -3,9 +3,9 @@
 // Why not transformers.js for this? The transformers-compatible silero
 // export on HuggingFace is gated behind an agreement, and the public
 // onnx-community export has no config.json, so transformers.js refuses it.
-// The raw ONNX is small (640 KB) and speaks a fixed protocol — one 512-sample
+// The raw ONNX is small (640 KB) and speaks a fixed protocol; one 512-sample
 // frame in, one speech probability out, plus two state tensors that carry
-// over to the next frame — so driving it directly is less code than working
+// over to the next frame; so driving it directly is less code than working
 // around the wrapper, and it runs inside the same worker with the same
 // vendored wasm.
 //

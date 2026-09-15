@@ -19,7 +19,7 @@
 //
 // The first signal is why the list below exists. Counting how many lines a word
 // appears in gets rid of "the", which is in nearly all of them, but it cannot
-// tell "we" from "migration" — both turn up in about a quarter of the lines of
+// tell "we" from "migration"; both turn up in about a quarter of the lines of
 // a real talk, and only one of them is what the talk is about. Naming the
 // function words is the part that makes this work rather than produce a tidy
 // ranking of the chattiest sentences. A language with no list here still gets
@@ -43,7 +43,7 @@ const NOTED = 2;
 const SAME = 0.5;
 /**
  * Below this there is nothing to pick from and the honest answer is nothing.
- * Whisper's phrases run five to ten seconds, so this is about two minutes —
+ * Whisper's phrases run five to ten seconds, so this is about two minutes , 
  * a recording you would simply read.
  */
 const MIN_LINES = 12;
@@ -61,7 +61,7 @@ const COMMON = 0.6;
  * Blab has written English only since 0.5.0, so the second half looks like
  * dead weight and is not. Highlights are worked out from transcript.md at the
  * moment a recording is opened, and that file can be older than the app
- * reading it — anyone who used the language picker while it existed still has
+ * reading it; anyone who used the language picker while it existed still has
  * Croatian transcripts sitting in their folder, and dropping these words would
  * quietly make their shortlists worse for no gain.
  *
@@ -109,7 +109,7 @@ export function sentences(text: string): Scored[] {
 }
 
 /**
- * True when two lines are about the same thing — the same words, or nearly
+ * True when two lines are about the same thing; the same words, or nearly
  * them. Measured against the shorter of the two, so "I'm not saying anything
  * less" is caught by the longer line it is a fragment of.
  *
@@ -135,7 +135,7 @@ function noted(at: number | null, notes: number[]): boolean {
 
 /**
  * The best `limit` lines, in the order they were said. Empty for a recording
- * too short to have a shape — a box saying nothing beats one padded out.
+ * too short to have a shape; a box saying nothing beats one padded out.
  */
 export function highlights(lines: Scored[], noteTimes: number[] = [], limit?: number): Scored[] {
   const usable = lines.filter((l) => l.text.trim().length > 0);
@@ -146,7 +146,7 @@ export function highlights(lines: Scored[], noteTimes: number[] = [], limit?: nu
 
   // How often each word is said, and how many lines it turns up in. The first
   // is the subject of the talk; the second catches anything the list above
-  // missed — a filler word peculiar to one speaker, or a language Blab has no
+  // missed; a filler word peculiar to one speaker, or a language Blab has no
   // list for.
   const said = new Map<string, number>();
   const inLines = new Map<string, number>();

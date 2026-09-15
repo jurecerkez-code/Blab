@@ -1,5 +1,5 @@
 // Thin wrapper over MediaRecorder. Holds the mic open for one recording only,
-// and — when asked — a second capture of whatever the computer is playing so
+// and; when asked; a second capture of whatever the computer is playing so
 // the other side of a call is in the file too.
 const MIME_CANDIDATES = ['audio/webm;codecs=opus', 'audio/webm'];
 
@@ -79,7 +79,7 @@ export class Recorder {
 
   /**
    * Throws if the browser or the user refuses the mic. A system-capture
-   * failure never throws — the recording carries on on the mic alone, with a
+   * failure never throws; the recording carries on on the mic alone, with a
    * warning the caller can pass on.
    */
   async start({ captureSystem = false, onSystemWarning }: RecorderOptions = {}): Promise<void> {
@@ -92,7 +92,7 @@ export class Recorder {
       //
       // Noise suppression is the one that hurts. It works by gating short
       // broadband transients, and the release of a /d/ or a /t/ *is* a short
-      // broadband transient — so it files the front off consonants. "Rear delt"
+      // broadband transient; so it files the front off consonants. "Rear delt"
       // came back as "rear aelt" here, and Whisper only invents a non-word when
       // the sound it was given has genuinely lost something.
       //
@@ -133,7 +133,7 @@ export class Recorder {
       } catch (err) {
         this.system = null;
         onSystemWarning?.(
-          `Could not capture computer audio (${(err as Error).message}) — recording the microphone only.`,
+          `Could not capture computer audio (${(err as Error).message}); recording the microphone only.`,
         );
       }
     }
@@ -149,7 +149,7 @@ export class Recorder {
 
   /**
    * Stops writing without ending the recording. The microphone stays open and
-   * the file stays one file — resume() carries on into the same one, so a
+   * the file stays one file; resume() carries on into the same one, so a
    * lecture with a break in the middle does not become two recordings.
    *
    * The pause itself is not stored: nothing is written while paused, so a ten

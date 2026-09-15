@@ -6,7 +6,7 @@ const OPUS_RATE = 48000;
 
 /**
  * How much 48 kHz audio to hold before resampling it down and letting it go.
- * Ten minutes is 28.8 M samples, about 115 MB — large enough that the seams
+ * Ten minutes is 28.8 M samples, about 115 MB; large enough that the seams
  * between blocks are rare, small enough to never approach the allocation
  * ceiling that broke the whole-file path.
  */
@@ -31,7 +31,7 @@ export async function decodeForWhisper(audio: Blob): Promise<Float32Array> {
     // Anything past roughly ninety minutes lands here. decodeAudioData has to
     // hold the entire file at Opus's native 48 kHz before it can resample it
     // down, and past about a gigabyte Chromium refuses the allocation and
-    // reports it as "Unable to decode audio data" — the same message a corrupt
+    // reports it as "Unable to decode audio data"; the same message a corrupt
     // file gives, which is why this looked like a broken recording rather than
     // a long one. Decoding packet by packet never needs that allocation.
     const streamed = await decodeInBlocks(bytes).catch(() => null);
@@ -243,7 +243,7 @@ function readOpusTrack(data: Uint8Array): OpusTrack | null {
   /** The TrackEntry being walked through right now. */
   let entry = blank();
   /**
-   * The one that turned out to be Opus — the only track whose blocks we want.
+   * The one that turned out to be Opus; the only track whose blocks we want.
    *
    * Held on an object rather than in a plain `let` because walk() below is
    * where it gets filled in, and TypeScript does not follow an assignment made
@@ -294,7 +294,7 @@ function readOpusTrack(data: Uint8Array): OpusTrack | null {
           // Each field above belongs to the entry it sits inside, so they are
           // read into a scratch and kept only if this entry turns out to be the
           // Opus one. Held flat, as they were, a second track would silently
-          // overwrite the first — and then its blocks would be fed to an Opus
+          // overwrite the first; and then its blocks would be fed to an Opus
           // decoder as if they were sound.
           const outer = entry;
           entry = blank();

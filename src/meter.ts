@@ -1,6 +1,6 @@
 // A row of bars that moves with the microphone, so a dead mic is obvious while
 // recording rather than after it. Watches the stream the recorder already
-// opened — a second getUserMedia would ask macOS for the microphone all over
+// opened; a second getUserMedia would ask macOS for the microphone all over
 // again, and hold a second capture open for no reason.
 const BARS = 14;
 /** Speech lives here; the rumble below and the hiss above only add noise. */
@@ -51,7 +51,7 @@ export class Meter {
     this.stop();
     try {
       const ctx = new AudioContext();
-      // A context can be born suspended — Chrome does it outside a gesture, and
+      // A context can be born suspended; Chrome does it outside a gesture, and
       // Windows does it again when the audio device was asleep.
       if (ctx.state === 'suspended') await ctx.resume();
 
