@@ -12,6 +12,11 @@ interface FileSystemDirectoryHandle {
 
 type MicStatus = 'granted' | 'denied' | 'restricted' | 'not-determined' | 'unsupported';
 
+interface Navigator {
+  /** Chromium only; Electron has it, Firefox does not. */
+  deviceMemory?: number;
+}
+
 interface Window {
   showDirectoryPicker(options?: {
     id?: string;
@@ -36,5 +41,7 @@ interface Window {
     setRecording(active: boolean): void;
     /** Absolute path of the git repository the named folder is in, or null. */
     gitRoot(folderName: string): Promise<string | null>;
+    /** Which machine this is, used to pick the default model at first launch. */
+    device?: { platform: string; arch: string };
   };
 }

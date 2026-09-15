@@ -10,6 +10,10 @@ Windows, Mac and Linux. Free. Offline. Your words stay on your machine.
 
 
 
+## All three models, out of the box
+
+Blab ships with all three Whisper models inside the installer. The Fast model is the default on older laptops, Balanced on a modern one, and Best on Apple Silicon. Blab picks the right one for your machine on first launch, so there is nothing to configure; the picker in the app is only there if you want to override it.
+
 ## What's new in 0.7.1
 
 - **Transcribe is always available.** Every recording can be transcribed or re-transcribed from its detail view, using whichever model the picker currently has, so a talk recorded with the fast model can be redone with the balanced one without recording again.
@@ -17,7 +21,7 @@ Windows, Mac and Linux. Free. Offline. Your words stay on your machine.
 - **Measured before choosing.** Beam search and WebGPU acceleration were benchmarked and rejected for this app: transformers.js's transcription path has no beam search at all (verified against the bundled source), and WebGPU would need fp32 weights that triple the download for no gain at this app's sizes. The VAD pass and the model picker are the accuracy levers instead.
 ## What's new in 0.7
 
-- **Model picker.** Fast (base), Balanced (small) and Best (medium) Whisper models, chosen once in the app. The default is Fast, which stays the right answer on an older laptop. `npm run setup small` and `npm run setup medium` fetch the others once, with internet.
+- **Model picker.** Fast (base), Balanced (small) and Best (medium) Whisper models. All three ship in the installer; Blab picks the right default for your machine at first launch and you can switch anytime.
 - **Silence-aware transcription.** A small voice-activity detector (Silero, runs on your machine) finds where the talk actually is, so Whisper only hears speech: faster, and quieter rooms stop turning into loops.
 - **Live captions.** While recording, Blab shows what it is hearing, updated as you talk. They are previews. The saved transcript is still made from the whole file at Stop.
 - **Meeting capture.** Tick "Record computer audio too" and the other side of a call is in the file, mixed with your microphone. On a Mac, System Settings → Privacy & Security → Screen Recording must list Blab.

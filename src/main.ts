@@ -3,7 +3,7 @@ import { decodeForWhisper } from './audio';
 import { type Scored, highlights, sentences } from './highlights';
 import { LiveCaptions } from './live-captions';
 import { Meter } from './meter';
-import { MODELS, modelById, savedModel, saveModel, savedSystemCapture, saveSystemCapture, type ModelId } from './models';
+import { MODELS, modelById, savedModel, saveModel, savedSystemCapture, saveSystemCapture, suggestedModel, type ModelId } from './models';
 import { NoteClock } from './notes';
 import { Recorder, formatDuration } from './recorder';
 import { forgetRoot, recallRoot, rememberRoot } from './store';
@@ -141,12 +141,21 @@ async function choose(): Promise<void> {
 
 async function modelInstalled(repo: string): Promise<boolean> {
   try {
-    const r = await fetch(`models/${repo}/onnx/encoder_model_quantized.onnx`, { method: 'HEAD' });
-    return (
-      r.ok &&
-      !(r.headers.get('content-type') ?? '').includes('text/html') &&
-      Number(r.headers.get('content-length')) > 1_000_000
+    // Both halves matter. A download that stops halfway leaves the encoder
+    // present and the decoder missing, and a picker that claims the model is
+    // ready while transcription would fail is a picker that lies.
+    const names = ['encoder_model_quantized.onnx', 'decoder_model_merged_quantized.onnx'];
+    const results = await Promise.all(
+      names.map(async (name) => {
+        const r = await fetch(`models/${repo}/onnx/${name}`, { method: 'HEAD' });
+        return (
+          r.ok &&
+          !(r.headers.get('content-type') ?? '').includes('text/html') &&
+          Number(r.headers.get('content-length')) > 1_000_000
+        );
+      }),
     );
+    return results.every(Boolean);
   } catch {
     return false;
   }
@@ -872,6 +881,9 @@ ui.setupPick.addEventListener('click', () => void setupPickClicked());
 
 async function boot(): Promise<void> {
   ui.meeting.checked = savedSystemCapture();
+  // First launch only: remember the machine's sensible default so the user
+  // never has to pick. The picker still works afterwards.
+  if (!localStorage.getItem('blab-model')) saveModel(suggestedModel());
   if (!('showDirectoryPicker' in window)) {
     ui.setup.classList.remove('hidden');
     ui.setupPick.disabled = true;

@@ -6,6 +6,12 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('blab', {
+  /**
+   * Which machine this is. Used once, at first launch, to pick the default
+   * model: Apple Silicon runs the medium model comfortably, an Intel laptop
+   * does not, and the page cannot tell them apart on its own.
+   */
+  device: { platform: process.platform, arch: process.arch },
   /** 'granted' | 'denied' | 'restricted' | 'not-determined' | 'unsupported' */
   micStatus: () => ipcRenderer.invoke('mic:status'),
   /** Shows the system prompt if it has never been answered. Resolves true if we may record. */
