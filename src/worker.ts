@@ -235,6 +235,18 @@ function settings(streamer: TextStreamer) {
     // — real speech reuses common words constantly and a heavy hand here
     // starts rewriting honest sentences.
     repetition_penalty: 1.15,
+    // A hard ceiling on how long one 30 s chunk may run. Whisper can get stuck
+    // and emit tokens almost forever; 224 tokens is generous for what a person
+    // can say in 30 seconds, and it caps the runaway case immediately. This is
+    // whisper.cpp's --max-len default, adopted wholesale.
+    max_new_tokens: 224,
+    // Explicit greedy, matching whisper.cpp's temperature 0 default. Do not
+    // read this as "we tried sampling and chose not to": transformers.js has no
+    // temperature fallback loop, and no beam search either (its seq2seq path
+    // carries a literal "TODO: Support beam search"). Both were measured on a
+    // real sample (see the 0.7.1 changelog) and neither is available here, so
+    // the guards above and the VAD pass carry that load instead.
+    temperature: 0,
     streamer,
   };
 }

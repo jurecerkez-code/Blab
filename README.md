@@ -9,6 +9,12 @@ your machine.
 Windows, Mac and Linux. Free. Offline. Your words stay on your machine.
 
 
+
+## What's new in 0.7.1
+
+- **Transcribe is always available.** Every recording can be transcribed or re-transcribed from its detail view, using whichever model the picker currently has — so a talk recorded with the fast model can be redone with the balanced one without recording again.
+- **A hard ceiling on runaway transcripts.** Each 30-second pass is bounded to 224 tokens (the same bound whisper.cpp uses), so a stuck Whisper can no longer emit a wall of repetition — the loop guards now have a fence, not just a leash.
+- **Measured before choosing.** Beam search and WebGPU acceleration were benchmarked and rejected for this app: transformers.js's transcription path has no beam search at all (verified against the bundled source), and WebGPU would need fp32 weights that triple the download for no gain at this app's sizes. The VAD pass and the model picker are the accuracy levers instead.
 ## What's new in 0.7
 
 - **Model picker.** Fast (base), Balanced (small) and Best (medium) Whisper models, chosen once in the app. The default is Fast, which stays the right answer on an older laptop. `npm run setup small` and `npm run setup medium` fetch the others once, with internet.

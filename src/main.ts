@@ -415,17 +415,18 @@ function actions(
     );
   }
 
-  // Only shown when a recording never got its transcript — usually because the
-  // model was not set up yet at the time.
-  if (!transcript?.trim()) {
-    const retry = document.createElement('button');
-    retry.textContent = 'Transcribe';
-    retry.addEventListener('click', () => {
-      retry.disabled = true;
-      void transcribeInto(dir, rec.dir).finally(() => (retry.disabled = false));
-    });
-    bar.append(retry);
-  }
+  // Transcribe is always offered: first time for a recording that never got
+  // its transcript, and from then on as a way to redo it — normally with a
+  // better model, which is exactly the loop the model picker is for. The
+  // picker's current model decides; the old transcript.md is overwritten.
+  const transcribe = document.createElement('button');
+  transcribe.textContent = transcript?.trim() ? 'Re-transcribe' : 'Transcribe';
+  transcribe.addEventListener('click', () => {
+    const before = transcribe.disabled;
+    transcribe.disabled = true;
+    void transcribeInto(dir, rec.dir).finally(() => (transcribe.disabled = before));
+  });
+  bar.append(transcribe);
   return bar;
 }
 
