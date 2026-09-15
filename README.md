@@ -12,18 +12,18 @@ Windows, Mac and Linux. Free. Offline. Your words stay on your machine.
 
 ## What's new in 0.7.1
 
-- **Transcribe is always available.** Every recording can be transcribed or re-transcribed from its detail view, using whichever model the picker currently has — so a talk recorded with the fast model can be redone with the balanced one without recording again.
-- **A hard ceiling on runaway transcripts.** Each 30-second pass is bounded to 224 tokens (the same bound whisper.cpp uses), so a stuck Whisper can no longer emit a wall of repetition — the loop guards now have a fence, not just a leash.
+- **Transcribe is always available.** Every recording can be transcribed or re-transcribed from its detail view, using whichever model the picker currently has, so a talk recorded with the fast model can be redone with the balanced one without recording again.
+- **A hard ceiling on runaway transcripts.** Each 30-second pass is bounded to 224 tokens (the same bound whisper.cpp uses), so a stuck Whisper can no longer emit a wall of repetition. The loop guards now have a fence, not just a leash.
 - **Measured before choosing.** Beam search and WebGPU acceleration were benchmarked and rejected for this app: transformers.js's transcription path has no beam search at all (verified against the bundled source), and WebGPU would need fp32 weights that triple the download for no gain at this app's sizes. The VAD pass and the model picker are the accuracy levers instead.
 ## What's new in 0.7
 
 - **Model picker.** Fast (base), Balanced (small) and Best (medium) Whisper models, chosen once in the app. The default is Fast, which stays the right answer on an older laptop. `npm run setup small` and `npm run setup medium` fetch the others once, with internet.
 - **Silence-aware transcription.** A small voice-activity detector (Silero, runs on your machine) finds where the talk actually is, so Whisper only hears speech: faster, and quieter rooms stop turning into loops.
-- **Live captions.** While recording, Blab shows what it is hearing, updated as you talk. They are previews — the saved transcript is still made from the whole file at Stop.
+- **Live captions.** While recording, Blab shows what it is hearing, updated as you talk. They are previews. The saved transcript is still made from the whole file at Stop.
 - **Meeting capture.** Tick "Record computer audio too" and the other side of a call is in the file, mixed with your microphone. On a Mac, System Settings → Privacy & Security → Screen Recording must list Blab.
 - **Import.** Transcribe an audio file that was not recorded in Blab: mp3, m4a, wav, ogg, flac, opus, aac, webm. The file is copied in as it is; nothing is re-encoded.
 - **Subtitle export.** Save .srt and .vtt from any timed transcript.
-- **A player worth reviewing with.** 0.5×–2× speed and keyboard control: Space plays/pauses, ←/→ skip 5 s, ↑/↓ skip 30 s.
+- **A player worth reviewing with.** 0.5x to 2x speed and keyboard control: Space plays/pauses, ←/→ skip 5 s, ↑/↓ skip 30 s.
 - **Transcripts survive crashes.** The transcript is written to disk as it is produced; the timed version replaces it at the end.
 - **`npm run app:check` now hears.** The check records a second of your microphone and fails on digital silence, not just on a missing device.
 
@@ -33,11 +33,11 @@ Everything is on the [releases page](https://github.com/jurecerkez-code/Blab/rel
 
 | Your computer | File | What to do |
 |---------------|------|------------|
-| **Windows** | `Blab-Setup-*.exe` | Run it. You get [a warning](#the-warning-on-windows-and-mac) — it is expected |
-| **Mac** | `Blab-*.dmg` | Open it, drag Blab into Applications. You get [a warning](#the-warning-on-windows-and-mac) — it is expected |
+| **Windows** | `Blab-Setup-*.exe` | Run it. You get [a warning](#the-warning-on-windows-and-mac). That is expected |
+| **Mac** | `Blab-*.dmg` | Open it, drag Blab into Applications. You get [a warning](#the-warning-on-windows-and-mac). That is expected |
 | **Linux** | `Blab-*.AppImage` | `chmod +x Blab-*.AppImage && ./Blab-*.AppImage --no-sandbox` |
 
-One Mac file works on every Mac, old or new — you do not need to know which
+One Mac file works on every Mac, old or new. You do not need to know which
 chip is in yours. The Linux file installs nothing and needs no package
 manager.
 
@@ -61,7 +61,7 @@ irm https://raw.githubusercontent.com/jurecerkez-code/Blab/main/scripts/install.
 
 Mac: lands in Applications. Linux: you get `blab` on your path and an entry in
 your menu. Windows: the normal installer runs, Blab turns up in the Start menu.
-None of them asks for an administrator password — Blab installs for one user
+None of them asks for an administrator password. Blab installs for one user
 and needs nothing from the system.
 
 On Linux this is the route to prefer: it handles both Linux quirks below for
@@ -90,7 +90,7 @@ it into a shell is a reasonable thing to want to do.
 ### The warning on Windows and Mac
 
 Nothing is wrong with the file. Windows and Mac both shout at any app whose
-author has not paid them a yearly fee — Apple wants 99 dollars a year,
+author has not paid them a yearly fee. Apple wants 99 dollars a year,
 Microsoft a few hundred euros. Blab makes no money, so it pays nobody, so you
 get one warning screen on the way in. It never asks again.
 
@@ -128,7 +128,7 @@ on the other two.
 
 ## Using it
 
-Pick one folder the first time — one folder for everything you will ever
+Pick one folder the first time. One folder for everything you will ever
 record. Type a title. Press **Record**. Type your notes while it listens.
 Press **Stop**. That is the whole thing.
 
@@ -147,7 +147,7 @@ is also asked to stay awake, so a lecture does not end early because a laptop
 decided it was idle.
 
 **Afterwards.** Click any old recording to read it, play it back, or press
-**Copy all** — title, notes and transcript on your clipboard as one block, ready
+**Copy all.** Title, notes and transcript on your clipboard as one block, ready
 to paste into an AI or an email. **Save .md** and **Save .txt** write the same
 block as a file.
 
@@ -181,7 +181,7 @@ The times are the same numbers in both files, so a note at `[14:20]` and a
 transcript line at `[14:20]` are the same moment of audio. They line up even
 when the talk had a break in it, because a pause writes nothing.
 
-Your notes split where you stopped typing — each time you come back is a new
+Your notes split where you stopped typing. Each time you come back is a new
 line with its own time, so you do not have to press Enter, and a paragraph you
 never broke up is not one moment. Pressing Enter splits it too, immediately.
 
@@ -191,7 +191,7 @@ separate index. The files are what matter.
 
 ## Worth going back to
 
-Above the transcript is a short list of lines from the talk. Not a summary — a
+Above the transcript is a short list of lines from the talk. Not a summary. A
 shortlist. Every line was said out loud, is quoted whole, and carries the time
 it was said at, so you can click one and hear it.
 
@@ -202,7 +202,7 @@ took. A wrong pick here costs you one dull line, and you can go and check it.
 
 Two things decide the list: what the talk keeps coming back to (a word said
 forty times is the subject, a word said once is an aside), and where you were
-typing — no statistic beats someone who was in the room. Recordings under a
+typing. No statistic beats someone who was in the room. Recordings under a
 couple of minutes get nothing; there is no shape in them to find.
 
 If you want real minutes, press **Copy all** and paste it into a large model.
@@ -214,7 +214,7 @@ Blab does the part that has to happen on your machine, and does not pretend a
 **English only**, and there is no picker to get wrong. Until 0.5.0 there was
 one, offering English or Croatian, and it was a trap: the language cannot be
 detected, so it had to be pinned by hand, and picking the wrong one does not
-give you a worse transcript — it gives you wreckage. An English recording with
+give you a worse transcript. It gives you wreckage. An English recording with
 Croatian selected came back as one real sentence followed by two thousand words
 of "ti ti ki ki pi ti". That is a setting whose wrong value destroys the
 recording, offered to someone who has just finished a lecture. So it is gone.
@@ -226,7 +226,7 @@ hours works the same way three minutes does. It just takes longer. Memory is
 the real ceiling: an hour is around 230 MB while it works, a couple of hours is
 comfortable, half a day is asking for trouble.
 
-**Speed is about 3.5x faster than real time** — a 45 minute talk takes roughly
+**Speed is about 3.5x faster than real time.** A 45 minute talk takes roughly
 13 minutes. It runs in the background, so you can start recording the next talk
 while the last one is still going.
 
@@ -235,7 +235,7 @@ while the last one is still going.
 3x faster and noticeably worse; `Xenova/whisper-small` is several times bigger
 and slower, and the installer grows with it. Adding `.en` gets the
 English-only tier, which is worth measuring on your own vocabulary rather than
-assuming — it was measured here and lost, so the multilingual model stayed.
+assuming. It was measured here and lost, so the multilingual model stayed.
 
 ### When the room beats the microphone
 
@@ -243,7 +243,7 @@ This is the one thing most likely to disappoint you, so it is worth being
 straight about.
 
 Whisper writes what it hears. Put a laptop at the back of a lecture hall and it
-hears a room, not a speaker, and then it guesses — and its way of guessing is
+hears a room, not a speaker, and then it guesses. Its way of guessing is
 repetition. One talk recorded here came back with a single phrase repeated 434
 times, and 39% of the transcript inside loops like that.
 
@@ -251,7 +251,7 @@ Blab pushes back in three places. A ban on any six word run repeating, which
 kills that kind of loop at its second repetition. A repetition penalty, because
 four tokens rotating through each other give thousands of arrangements and none
 of them is an exact repeat. And then a check: looping text compresses far too
-well, so above a gzip ratio of 2.4 — ordinary speech sits between 1.5 and 2.0 —
+well, so above a gzip ratio of 2.4. Ordinary speech sits between 1.5 and 2.0,
 the transcript is still saved and the app tells you plainly that Whisper got
 stuck, rather than leaving you to find out at the bottom of the file. The
 recording that prompted this scored 3.15.
@@ -266,7 +266,7 @@ One part of it was Blab's own fault and is fixed. The microphone was opened
 with `audio: true`, which takes the browser's defaults, and those are tuned for
 a voice call: echo cancellation, noise suppression and automatic gain, all on.
 Automatic gain lifts a quiet room until the meter looks healthy while mostly
-amplifying the air conditioning. Noise suppression is worse — it gates short
+amplifying the air conditioning. Noise suppression is worse. It gates short
 broadband sounds, and the release of a consonant is a short broadband sound, so
 it files the front off words. All three are now off, and the microphone reaches
 Whisper the way Whisper was trained to hear it.
@@ -276,7 +276,7 @@ Whisper the way Whisper was trained to hear it.
 No, and not because this file says so.
 
 The app runs under `Content-Security-Policy: connect-src 'self'`. It cannot
-open a connection to any other server — the engine refuses before a request
+open a connection to any other server. The engine refuses before a request
 happens. You do not have to trust me on it, you can go and try to break it.
 
 The rest, if you want to check:
@@ -302,7 +302,7 @@ chips in one file. Once it is installed, Blab downloads nothing, ever.
 ## Building it yourself
 
 You need [Node.js](https://nodejs.org) 20 or newer, and you can only build for
-the system you are sitting at — Windows makes the exe, a Mac makes the dmg, a
+the system you are sitting at. Windows makes the exe, a Mac makes the dmg, a
 Linux machine makes the AppImage.
 
 ```
@@ -342,7 +342,7 @@ npm run dev        same app in a browser tab, Chrome or Edge only
 
 `npm test` needs its browser once, with `npx playwright install chromium`. It
 drives Chrome with a fake microphone, so it can check that the bars actually
-move rather than only that they exist — a window that is never drawn never runs
+move rather than only that they exist. A window that is never drawn never runs
 an animation frame, so that test needs a real browser to mean anything.
 
 `app:check` opens the app, asks for the microphone, and pushes two seconds of
@@ -356,7 +356,7 @@ whisper weights: ok: 23200850 bytes
 end to end: ok: loaded and transcribed 2s in 6s
 ```
 
-Run it before you ship anything — but do not trust the microphone line on its
+Run it before you ship anything, but do not trust the microphone line on its
 own. Started from a terminal, Blab inherits whatever permission that terminal
 already has, so it reads `ok` on a build that cannot record a thing once
 launched normally. 0.2.0 shipped that way: every recording on a Mac was
@@ -370,7 +370,7 @@ embedded preview pane. The desktop app has neither problem.
 
 **If packaging fails on Windows** with `Cannot create symbolic link`,
 electron-builder pulled a signing bundle full of macOS symlinks. None of it is
-needed here — extract it yourself once, skipping the macOS half, then run
+needed here. Extract it yourself once, skipping the macOS half, then run
 `npm run package` again:
 
 ```
