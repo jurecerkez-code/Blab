@@ -350,7 +350,7 @@ async function open(rec: Recording): Promise<void> {
       ? timedBlock('Your notes', view.noteLines, seek)
       : block('Your notes', notes, 'You did not write any notes.'),
     view.timedScript
-      ? timedBlock('Transcript', view.timedScript, seek)
+      ? timedBlock('Transcript', view.timedScript, seek, undefined, 'hide')
       : block('Transcript', transcript, 'No transcript yet.'),
     actions(rec, dir, view, notes, transcript),
   );
@@ -533,6 +533,7 @@ function timedBlock(
   lines: Scored[],
   seek: ((ms: number) => void) | null,
   hint?: string,
+  times: 'show' | 'hide' = 'show',
 ): HTMLDivElement {
   const wrap = document.createElement('div');
   wrap.className = 'block';
@@ -552,11 +553,12 @@ function timedBlock(
   for (const line of lines) {
     const at = line.at;
     // Nothing to jump to without both a time and a player, and a button that
-    // does nothing is worse than a plain line.
+    // does nothing is worse than a plain line. The transcript keeps its times
+    // for clicking; the stamp is only hidden from view.
     const clickable = seek !== null && at !== null;
     const row = document.createElement(clickable ? 'button' : 'div');
     row.className = 'line';
-    if (at !== null) {
+    if (at !== null && times === 'show') {
       const when = document.createElement('span');
       when.className = 'at';
       when.textContent = formatDuration(at);

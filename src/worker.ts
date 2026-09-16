@@ -161,6 +161,21 @@ class PartialStreamer extends TextStreamer {
       callback_function: (t: string) => (this.acc += t),
     });
   }
+  /**
+   * Whisper's timestamp tokens (`<|1.32|>`) are not marked as special in the
+   * tokenizer config, so skip_special_tokens leaves them in and they crawl
+   * into the partial text, and their presence even makes the incremental
+   * decoder repeat words. Filter the token ids by their decoded form before
+   * the streamer turns them into text.
+   */
+  override put(value: bigint[][]): void {
+    const tokens = value[0];
+    const keep = tokens.filter((token) => {
+      const text = this.tokenizer.decode([token], { skip_special_tokens: false });
+      return !/^<\|[\d.]+\|>$/.test(text);
+    });
+    super.put([keep]);
+  }
   override end(): void {
     this.done = Math.min(this.done + 1, this.total);
     post({ type: 'progress', id: this.id, done: this.done, total: this.total });
@@ -199,6 +214,14 @@ async function looping(text: string): Promise<boolean> {
     // A missing CompressionStream must never cost someone their transcript.
     return false;
   }
+}
+
+/** Whisper timestamp tokens that leak into decoded text on some paths. */
+const TIME_TOKEN = /<\|[\d.]+\|>/g;
+
+/** Words only. A timestamp token that survived decoding is not a word. */
+function stripTimestamps(text: string): string {
+  return text.replace(TIME_TOKEN, ' ').replace(/\s+/g, ' ').trim();
 }
 
 /** The common transcription settings, shared by the full and live jobs. */
@@ -307,15 +330,20 @@ async function runTranscribe(
       );
 
       const parts = Array.isArray(result) ? result : [result];
-      text = parts
-        .map((r) => r.text)
-        .join(' ')
-        .trim();
+      text = stripTimestamps(
+        parts
+          .map((r) => r.text)
+          .join(' ')
+          .trim(),
+      );
       const rawLines = fromChunks(parts);
       segments =
         offsets.length > 0
-          ? rawLines.map((l) => ({ at: mapToRecording(l.at / 1000, offsets), text: l.text }))
-          : rawLines;
+          ? rawLines.map((l) => ({
+              at: mapToRecording(l.at / 1000, offsets),
+              text: stripTimestamps(l.text),
+            }))
+          : rawLines.map((l) => ({ ...l, text: stripTimestamps(l.text) }));
     } else {
       noSpeech = true;
     }
@@ -357,10 +385,12 @@ async function runLive(
     const asr = await getAsr(repo, modelPath, ortPath);
     const result = await asr(audio, settings(new TextStreamer(asr.tokenizer as any, { skip_prompt: true })));
     const parts = Array.isArray(result) ? result : [result];
-    const text = parts
-      .map((r) => r.text)
-      .join(' ')
-      .trim();
+    const text = stripTimestamps(
+      parts
+        .map((r) => r.text)
+        .join(' ')
+        .trim(),
+    );
     const first = fromChunks(parts)[0];
     post({ type: 'live', id, text: text || null, at: first ? at + first.at : at });
   } catch {
