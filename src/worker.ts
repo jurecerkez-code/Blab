@@ -8,6 +8,7 @@ import {
 import { type ModelId, modelById } from './models';
 import { fromChunks } from './timeline';
 import { assembleSpeech, mapToRecording, speechWindows } from './vad';
+import { filterTimestampTokens } from './tokens';
 
 /**
  * Whisper stays multilingual even though Blab only writes English.
@@ -169,12 +170,7 @@ class PartialStreamer extends TextStreamer {
    * the streamer turns them into text.
    */
   override put(value: bigint[][]): void {
-    const tokens = value[0];
-    const keep = tokens.filter((token) => {
-      const text = this.tokenizer.decode([token], { skip_special_tokens: false });
-      return !/^<\|[\d.]+\|>$/.test(text);
-    });
-    super.put([keep]);
+    super.put([filterTimestampTokens(value[0])]);
   }
   override end(): void {
     this.done = Math.min(this.done + 1, this.total);
