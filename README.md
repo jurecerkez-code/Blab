@@ -8,29 +8,6 @@ your machine.
 
 Windows, Mac and Linux. Free. Offline. Your words stay on your machine.
 
-
-
-## All three models, out of the box
-
-Blab ships with all three Whisper models inside the installer. The Fast model is the default on older laptops, Balanced on a modern one, and Best on Apple Silicon. Blab picks the right one for your machine on first launch, so there is nothing to configure; the picker in the app is only there if you want to override it.
-
-## What's new in 0.7.1
-
-- **Transcribe is always available.** Every recording can be transcribed or re-transcribed from its detail view, using whichever model the picker currently has, so a talk recorded with the fast model can be redone with the balanced one without recording again.
-- **A hard ceiling on runaway transcripts.** Each 30-second pass is bounded to 224 tokens (the same bound whisper.cpp uses), so a stuck Whisper can no longer emit a wall of repetition. The loop guards now have a fence, not just a leash.
-- **Measured before choosing.** Beam search and WebGPU acceleration were benchmarked and rejected for this app: transformers.js's transcription path has no beam search at all (verified against the bundled source), and WebGPU would need fp32 weights that triple the download for no gain at this app's sizes. The VAD pass and the model picker are the accuracy levers instead.
-## What's new in 0.7
-
-- **Model picker.** Fast (base), Balanced (small) and Best (medium) Whisper models. All three ship in the installer; Blab picks the right default for your machine at first launch and you can switch anytime.
-- **Silence-aware transcription.** A small voice-activity detector (Silero, runs on your machine) finds where the talk actually is, so Whisper only hears speech: faster, and quieter rooms stop turning into loops.
-- **Live captions.** While recording, Blab shows what it is hearing, updated as you talk. They are previews. The saved transcript is still made from the whole file at Stop.
-- **Meeting capture.** Tick "Record computer audio too" and the other side of a call is in the file, mixed with your microphone. On a Mac, System Settings → Privacy & Security → Screen Recording must list Blab.
-- **Import.** Transcribe an audio file that was not recorded in Blab: mp3, m4a, wav, ogg, flac, opus, aac, webm. The file is copied in as it is; nothing is re-encoded.
-- **Subtitle export.** Save .srt and .vtt from any timed transcript.
-- **A player worth reviewing with.** 0.5x to 2x speed and keyboard control: Space plays/pauses, ←/→ skip 5 s, ↑/↓ skip 30 s.
-- **Transcripts survive crashes.** The transcript is written to disk as it is produced; the timed version replaces it at the end.
-- **`npm run app:check` now hears.** The check records a second of your microphone and fails on digital silence, not just on a missing device.
-
 ## Download
 
 Everything is on the [releases page](https://github.com/jurecerkez-code/Blab/releases/latest).
@@ -42,14 +19,13 @@ Everything is on the [releases page](https://github.com/jurecerkez-code/Blab/rel
 | **Linux** | `Blab-*.AppImage` | `chmod +x Blab-*.AppImage && ./Blab-*.AppImage --no-sandbox` |
 
 One Mac file works on every Mac, old or new. You do not need to know which
-chip is in yours. The Linux file installs nothing and needs no package
-manager.
+chip is in yours. The Linux file installs nothing and needs no package manager.
 
 ### Or one command
 
-Same command on all three systems but the name of the shell. It finds the
-latest release, downloads the one file for your machine, and puts it where
-that system expects an app to live.
+Same command on all three systems, only the shell differs. It finds the latest
+release, downloads the one file for your machine, and puts it where that
+system expects an app to live.
 
 **Mac and Linux**
 
@@ -63,383 +39,176 @@ curl -fsSL https://raw.githubusercontent.com/jurecerkez-code/Blab/main/scripts/i
 irm https://raw.githubusercontent.com/jurecerkez-code/Blab/main/scripts/install.ps1 | iex
 ```
 
-Mac: lands in Applications. Linux: you get `blab` on your path and an entry in
-your menu. Windows: the normal installer runs, Blab turns up in the Start menu.
-None of them asks for an administrator password. Blab installs for one user
-and needs nothing from the system.
+Mac lands in Applications. Linux gets `blab` on your path and an entry in
+your menu. Windows runs the normal installer and Blab turns up in the Start
+menu. None of them asks for an administrator password.
 
-On Linux this is the route to prefer: it handles both Linux quirks below for
-you. On Mac it skips the warning screen entirely, because that screen is shown
-to files a *browser* downloaded and `curl` does not mark them the same way.
-Nothing is switched off to manage that.
-
-Both scripts are short, they live in `scripts/`, and reading one before piping
-it into a shell is a reasonable thing to want to do.
-
-## If something goes wrong
-
-| What you see | What to do |
-|--------------|------------|
-| **Windows:** "Windows protected your PC" | **More info** → **Run anyway**. [Why](#the-warning-on-windows-and-mac) |
-| **Mac:** "Blab" Not Opened, and no Open button | **Done**, then System Settings → Privacy & Security → scroll to the bottom → **Open Anyway**. [Why](#the-warning-on-windows-and-mac) |
-| **Linux:** `dlopen(): error loading libfuse.so.2` | `sudo apt install libfuse2`, or run it as `APPIMAGE_EXTRACT_AND_RUN=1 ./Blab-*.AppImage --no-sandbox`. [Why](#the-two-linux-quirks) |
-| **Linux:** it refuses to start from a terminal | Add `--no-sandbox`. [Why](#the-two-linux-quirks) |
-| The bars stay flat while you talk | Blab cannot hear you. Wrong microphone, muted, or unplugged. Fix it *now*, not after the talk |
-| The transcript repeats one phrase forever | Whisper got stuck, because the microphone was too far away. Blab tells you when this happens. [What to do about it](#when-the-room-beats-the-microphone) |
-| The transcript is thin, or full of near-words | Same cause. Get within two or three metres of the speaker |
-| A folder you made yourself is not in the list | Blab only sees folders it named. Do not make them by hand |
-| `Unable to decode audio data` on a long recording | A bug fixed in 0.3.2. Update |
-| First launch takes ten seconds | The model is loading. Every launch after that is two or three |
-
-### The warning on Windows and Mac
-
-Nothing is wrong with the file. Windows and Mac both shout at any app whose
-author has not paid them a yearly fee. Apple wants 99 dollars a year,
-Microsoft a few hundred euros. Blab makes no money, so it pays nobody, so you
-get one warning screen on the way in. It never asks again.
-
-On Mac the screen is titled **"Blab" Not Opened** and offers only **Move to
-Trash** and **Done**. There is no Open button, and this is the part that
-catches people: click **Done**, then go to System Settings → Privacy &
-Security, scroll to the bottom, and click **Open Anyway** beside Blab.
-
-Older guides say to right click the app and choose Open. That stopped working
-in macOS 15.
-
-Linux asks for none of this. If you do not want to trust any of it, the source
-is right here and you can [build it yourself](#building-it-yourself).
-
-### The two Linux quirks
-
-Neither is Blab's doing, and the [one command installer](#or-one-command)
-handles both.
-
-**FUSE.** An AppImage is a small filesystem the runtime mounts, which needs
-FUSE, and Ubuntu has not shipped `libfuse2` since 22.04. Install it, or tell
-the runtime to unpack itself instead:
-
-```
-APPIMAGE_EXTRACT_AND_RUN=1 ./Blab-*.AppImage --no-sandbox
-```
-
-**The sandbox.** Chromium's sandbox needs a small root-owned helper, and an
-AppImage is a single unprivileged file that cannot ship one, so
-electron-builder switches it off. The menu entry passes `--no-sandbox` for you;
-a bare run from a terminal does not, so on Ubuntu 24.04 it refuses to start
-until you pass it yourself. Nothing else changes: the window still has no Node
-access and `connect-src 'self'` still forbids the network, on Linux exactly as
-on the other two.
+Both scripts are short and live in `scripts/`. Reading one before piping it
+into a shell is a reasonable thing to do.
 
 ## Using it
 
-Pick one folder the first time. One folder for everything you will ever
-record. Type a title. Press **Record**. Type your notes while it listens.
-Press **Stop**. That is the whole thing.
+1. Open Blab and pick a folder for your recordings. Once, ever.
+2. Type a title. Press **Record**.
+3. Type notes while you listen. Blab remembers when each line was written.
+4. Press **Stop**. Your audio and notes are saved, and Blab transcribes on
+   this machine, in the background.
+5. Open the recording to read the transcript, click any line to hear that
+   moment, or press the speed button to review faster.
 
-**The bars.** A row under the button moves with your voice. It exists because a
-microphone that is muted or pointed at the wrong device looks exactly like a
-working one until you press Stop and read an empty transcript.
+All three Whisper models (Fast, Balanced, Best) are inside the installer.
+Blab picks the right one for your machine on first launch: Best on Apple
+Silicon, Balanced on a modern laptop, Fast on an older one. The picker in the
+app is only there if you want to override it.
 
-**Pause.** A break in a lecture does not have to become two recordings.
-Pausing keeps the microphone and the file open and writes nothing in between,
-so the break costs no disk and no transcription time. The timer counts recorded
-time, not time since you pressed Record.
+The rest is optional extras, each one checkbox-sized:
 
-**Nothing is written until Stop**, so closing the window, quitting and
-reloading all ask first rather than throwing away a live recording. The machine
-is also asked to stay awake, so a lecture does not end early because a laptop
-decided it was idle.
+- **Live captions** while you record, so a dead microphone is obvious during
+  the talk, not after it.
+- **Record computer audio too**: the other side of a call lands in the file
+  as well as your voice.
+- **Import audio**: transcribe an mp3, m4a, wav, ogg, flac, opus, aac or webm
+  that was not recorded in Blab.
+- **Re-transcribe** any recording with a different model, no re-recording.
+- **Save .srt / .vtt** subtitles or a plain `.md` / `.txt` copy of the talk.
+- **Space, arrow keys, 0.5x to 2x speed** on the built-in player.
 
-**Afterwards.** Click any old recording to read it, play it back, or press
-**Copy all.** Title, notes and transcript on your clipboard as one block, ready
-to paste into an AI or an email. **Save .md** and **Save .txt** write the same
-block as a file.
+### Troubleshooting
 
-Every line says when it happened, and clicking one plays the audio from that
-second. That works for your own notes too, which is the useful half: you wrote
-"ask him about the deadline" at fourteen minutes, so click it and hear what was
-actually said at fourteen minutes.
+| What you see | What to do |
+|--------------|------------|
+| **Windows:** "Windows protected your PC" | **More info** then **Run anyway**. [Why](#the-warning-on-windows-and-mac) |
+| **Mac:** "Blab" Not Opened, no Open button | **Done**, then System Settings, Privacy & Security, scroll down, **Open Anyway**. [Why](#the-warning-on-windows-and-mac) |
+| **Linux:** `dlopen(): error loading libfuse.so.2` | `sudo apt install libfuse2`, or run `APPIMAGE_EXTRACT_AND_RUN=1 ./Blab-*.AppImage --no-sandbox` |
+| **Linux:** refuses to start from a terminal | Add `--no-sandbox` |
+| The bars stay flat while you talk | Blab cannot hear you. Wrong microphone, muted, or unplugged. Fix it now, not after the talk |
+| The transcript repeats one phrase forever | Whisper got stuck, because the microphone was too far away |
 
 ## Where your stuff goes
 
-```
-your-folder/
-  2026-06-14_1030_judge-talk/
-    audio.webm
-    notes.md
-    transcript.md
-```
+A recording is a folder named `2026-09-15_1430_talk-title` in the folder you
+picked. Inside: `audio.webm`, `notes.md`, `transcript.md`. Plain files, no
+database, readable in any editor, movable anywhere. Your notes and the
+transcript both carry `[mm:ss]` stamps so the two sit on one timeline.
 
-Plain files. No database, no index, no hidden state. Open them in any editor,
-search them with anything, back them up by copying the folder. Blab does not
-need to be running. Blab does not need to exist.
+Blab will not record into a git repository. It refuses such folders outright:
+recordings in a working tree are one `git add -A` from being pushed somewhere
+they do not belong.
 
-Both text files carry the time each line belongs to, counted from the start:
+Do not create folders inside your recordings folder by hand. Blab names them
+and ignores anything it did not name.
 
-```
-[00:00] Right, we should probably get started.
-[00:31] The first thing is the database migration.
-```
-
-The times are the same numbers in both files, so a note at `[14:20]` and a
-transcript line at `[14:20]` are the same moment of audio. They line up even
-when the talk had a break in it, because a pause writes nothing.
-
-Your notes split where you stopped typing. Each time you come back is a new
-line with its own time, so you do not have to press Enter, and a paragraph you
-never broke up is not one moment. Pressing Enter splits it too, immediately.
-
-The folder name is `date_time_title`, so titles come back as slugs: "API
-Workshop" shows up as "Api workshop". That is the price of not keeping a
-separate index. The files are what matter.
+A fresh install ships with no recordings. You point it at a folder and it
+starts there.
 
 ## Worth going back to
 
-Above the transcript is a short list of lines from the talk. Not a summary. A
-shortlist. Every line was said out loud, is quoted whole, and carries the time
-it was said at, so you can click one and hear it.
-
-No model writes it, and that is a choice. A language model small enough to ship
-inside this installer would write smoother paragraphs and would also, on
-exactly the transcripts that are already hard to trust, state decisions nobody
-took. A wrong pick here costs you one dull line, and you can go and check it.
-
-Two things decide the list: what the talk keeps coming back to (a word said
-forty times is the subject, a word said once is an aside), and where you were
-typing. No statistic beats someone who was in the room. Recordings under a
-couple of minutes get nothing; there is no shape in them to find.
-
-If you want real minutes, press **Copy all** and paste it into a large model.
-Blab does the part that has to happen on your machine, and does not pretend a
-0.6 billion parameter model is the same thing as a good one.
+Above every transcript is a short list: the lines the talk kept coming back
+to, and the moments where you were typing. Every line is quoted whole from
+the transcript, with the time it was said. Nothing here is written by a
+machine. A wrong pick costs you a dull line, never an invented fact.
 
 ## What it writes, and how well
 
-**English only**, and there is no picker to get wrong. Until 0.5.0 there was
-one, offering English or Croatian, and it was a trap: the language cannot be
-detected, so it had to be pinned by hand, and picking the wrong one does not
-give you a worse transcript. It gives you wreckage. An English recording with
-Croatian selected came back as one real sentence followed by two thousand words
-of "ti ti ki ki pi ti". That is a setting whose wrong value destroys the
-recording, offered to someone who has just finished a lecture. So it is gone.
-Croatian is a real loss for anyone who used it; the model still knows it, and
-the way back is in the git history at v0.5.0.
+Transcription runs faster than real time on the Fast model (about 3.5x on a
+laptop CPU: a 45 minute talk takes around 13 minutes, in the background).
+Balanced and Best trade speed for accuracy; Best is worth the wait on Apple
+Silicon, and slow on an old CPU. There is no length limit: a long recording
+is decoded in blocks, memory is the only ceiling.
 
-**No limit on length.** Whisper reads the audio in 30 second chunks, so three
-hours works the same way three minutes does. It just takes longer. Memory is
-the real ceiling: an hour is around 230 MB while it works, a couple of hours is
-comfortable, half a day is asking for trouble.
-
-**Speed is about 3.5x faster than real time.** A 45 minute talk takes roughly
-13 minutes. It runs in the background, so you can start recording the next talk
-while the last one is still going.
-
-**Want it faster or better?** Change one line: `MODEL` at the top of
-`src/worker.ts`, then run `npm run setup` again. `Xenova/whisper-tiny` is about
-3x faster and noticeably worse; `Xenova/whisper-small` is several times bigger
-and slower, and the installer grows with it. Adding `.en` gets the
-English-only tier, which is worth measuring on your own vocabulary rather than
-assuming. It was measured here and lost, so the multilingual model stayed.
+Silence never reaches Whisper. A small voice-activity detector (Silero, also
+on your machine) finds the actual speech, so a quiet room does not turn into
+a hallucinated loop, and the transcript is faster for it. Whisper itself is
+guarded against repetition, and each 30 second pass is capped at 224 tokens
+so a stuck model cannot run on forever.
 
 ### When the room beats the microphone
 
-This is the one thing most likely to disappoint you, so it is worth being
-straight about.
-
-Whisper writes what it hears. Put a laptop at the back of a lecture hall and it
-hears a room, not a speaker, and then it guesses. Its way of guessing is
-repetition. One talk recorded here came back with a single phrase repeated 434
-times, and 39% of the transcript inside loops like that.
-
-Blab pushes back in three places. A ban on any six word run repeating, which
-kills that kind of loop at its second repetition. A repetition penalty, because
-four tokens rotating through each other give thousands of arrangements and none
-of them is an exact repeat. And then a check: looping text compresses far too
-well, so above a gzip ratio of 2.4. Ordinary speech sits between 1.5 and 2.0,
-the transcript is still saved and the app tells you plainly that Whisper got
-stuck, rather than leaving you to find out at the bottom of the file. The
-recording that prompted this scored 3.15.
-
-What none of it can do is invent words the microphone never caught. That same
-talk holds 60 words per minute of real speech where a well captured one holds
-170. **So the fix is mostly physical: get within two or three metres of whoever
-is speaking, or put any external microphone closer.** Earbuds on the table beat
-a laptop across the room.
-
-One part of it was Blab's own fault and is fixed. The microphone was opened
-with `audio: true`, which takes the browser's defaults, and those are tuned for
-a voice call: echo cancellation, noise suppression and automatic gain, all on.
-Automatic gain lifts a quiet room until the meter looks healthy while mostly
-amplifying the air conditioning. Noise suppression is worse. It gates short
-broadband sounds, and the release of a consonant is a short broadband sound, so
-it files the front off words. All three are now off, and the microphone reaches
-Whisper the way Whisper was trained to hear it.
+Whisper is honest about its limits. If the transcript looks like a loop, the
+app says so in plain words instead of pretending: get the microphone closer
+and record again. A laptop mic at the back of a lecture hall will never read
+like a studio recording, and no app setting changes that.
 
 ## Does it phone home
 
-No, and not because this file says so.
-
-The app runs under `Content-Security-Policy: connect-src 'self'`. It cannot
-open a connection to any other server. The engine refuses before a request
-happens. You do not have to trust me on it, you can go and try to break it.
-
-The rest, if you want to check:
-
-- The transcriber runs with `allowRemoteModels = false`. A missing file fails
-  loudly instead of quietly fetching one.
-- The window has no Node access, and runs sandboxed on Windows and Mac. The
-  Linux AppImage cannot, [for the reason above](#the-two-linux-quirks).
-- USB, HID and serial devices are refused outright.
-- Three permissions are granted: microphone, the folder you picked, clipboard.
-- Two things here download anything, and neither is the app. `npm run setup`
-  fetches the model once while you build; the install scripts fetch one release
-  file if you choose to install that way. All are short, and readable.
-
-Your audio, your notes and your transcripts stay in your folder.
+No. The app's security policy blocks every network connection at the engine
+level, and there is no telemetry code to run if it could. The only download
+in your life with Blab is Blab itself. A source build downloads the models
+once during setup and never needs the network again.
 
 ## Why the file is so big
 
-The speech model is inside it: 153 MB on Windows, 187 MB on Linux, 276 MB on
-Mac. The Mac one is bigger because it holds a version for both Apple and Intel
-chips in one file. Once it is installed, Blab downloads nothing, ever.
+Because everything is already in it. All three Whisper models plus the
+voice-activity detector ship inside the installer (about 758 MB), which is
+why the answer to "do I need to download anything else" is no. The trade is
+a bigger download once for never needing the network forever.
 
 ## Building it yourself
-
-You need [Node.js](https://nodejs.org) 20 or newer, and you can only build for
-the system you are sitting at. Windows makes the exe, a Mac makes the dmg, a
-Linux machine makes the AppImage.
 
 ```
 git clone https://github.com/jurecerkez-code/Blab.git
 cd Blab
 npm install
-npm run setup
-npm run package
-```
-
-Needing two computers to cut one release is how 0.3.2 went out as an exe with
-no dmg beside it. So pushing a tag now builds all three:
-
-```
-git tag v0.6.0
-git push origin v0.6.0
-```
-
-GitHub lends out a Windows machine, a Mac and a Linux box, runs the same
-`npm run package` on each, and leaves all three installers on a **draft**
-release. Nothing is public until someone reads it and presses publish.
-`.github/workflows/release.yml` is the whole of it, and you can run it by hand
-from the Actions tab.
-
-`npm run setup` is the only network moment in the whole project. It pulls the
-Whisper model from HuggingFace, with the same files copied onto a Blab release
-as a backup, so setup keeps working even if those URLs move.
-
-Other commands:
-
-```
-npm run app        build and open the app, no installer
-npm run app:check  prove the microphone, model and threads work
-npm test           run the feature files against a real browser
-npm run dev        same app in a browser tab, Chrome or Edge only
-```
-
-`npm test` needs its browser once, with `npx playwright install chromium`. It
-drives Chrome with a fake microphone, so it can check that the bars actually
-move rather than only that they exist. A window that is never drawn never runs
-an animation frame, so that test needs a real browser to mean anything.
-
-`app:check` opens the app, asks for the microphone, and pushes two seconds of
-silence through the real Whisper worker. Four lines, and it exits non zero if
-any of them failed:
-
-```
-threads (SharedArrayBuffer): true
-microphone: ok: Default - Microphone Array (Realtek(R) Audio)
-whisper weights: ok: 23200850 bytes
-end to end: ok: loaded and transcribed 2s in 6s
-```
-
-Run it before you ship anything, but do not trust the microphone line on its
-own. Started from a terminal, Blab inherits whatever permission that terminal
-already has, so it reads `ok` on a build that cannot record a thing once
-launched normally. 0.2.0 shipped that way: every recording on a Mac was
-silence, and `app:check` said `ok` throughout. To trust the microphone, open
-the app from Finder or the Start menu and record yourself saying something you
-can check.
-
-The browser version needs the File System Access API to write to your folder,
-which Firefox and Safari do not have, and cannot get the microphone inside an
-embedded preview pane. The desktop app has neither problem.
-
-**If packaging fails on Windows** with `Cannot create symbolic link`,
-electron-builder pulled a signing bundle full of macOS symlinks. None of it is
-needed here. Extract it yourself once, skipping the macOS half, then run
-`npm run package` again:
-
-```
-curl -L -o wcs.7z https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z
-node_modules/7zip-bin/win/x64/7za.exe x wcs.7z -o"%LOCALAPPDATA%/electron-builder/Cache/winCodeSign/winCodeSign-2.6.0" -xr!darwin
+npm run setup        # one-time model download, needs internet
+npm run dev          # the app in a browser tab
+npm run app          # the desktop app
+npm run app:check    # proves mic, model and worker end to end
+npm run package      # installers for your OS
 ```
 
 ## How it is built
 
-Vite and plain TypeScript in an Electron window. No framework, no UI library,
-no state library. The one real dependency is `transformers.js`, bundled rather
-than loaded from a CDN.
+Electron + TypeScript + Vite. Whisper runs inside the app through
+transformers.js (WebAssembly, no Python, no GPU driver required), the VAD
+runs through the same vendored onnxruntime, and storage is plain files in a
+folder you own. The README you are reading goes with a repo where every
+safety rule (offline, no accounts, plain files) is enforced in code, not
+promised in prose.
 
-```
-electron/
-  main.cjs        the desktop shell. one window, strict policy, yes to the mic,
-                  and it will not let a keystroke throw away a live recording
-src/
-  main.ts         the one screen and all its wiring
-  vault.ts        reading and writing the folder
-  recorder.ts     MediaRecorder
-  meter.ts        the live bars, reading the recorder's own microphone stream
-  audio.ts        webm into mono 16 kHz samples, what Whisper wants
-  transcriber.ts  talks to the worker, queues jobs
-  worker.ts       Whisper itself, off the main thread
-  timeline.ts     the [mm:ss] prefix, written and read back
-  notes.ts        when each line of your notes was typed
-  highlights.ts   the shortlist, picked with arithmetic and no model
-  store.ts        remembers your folder
-scripts/
-  setup.mjs       fetches the model, once, while you build
-  icon.mjs        renders the app icon
-  package.mjs     builds the installer and puts it where you can find it
-  install.sh      one command install, for a Mac or a Linux box
-  install.ps1     the same one for Windows
-features/
-  *.feature       what each feature is supposed to do, in plain English
-tests/
-  *.spec.ts       the same scenarios, executed
-```
+## Rejected, with reasons
 
-The meter watches the stream the recorder already opened rather than asking for
-the microphone a second time, which would prompt macOS all over again and hold
-a second device open for nothing.
+Decisions are kept in the code where reviewers can see them. Two frequent
+suggestions were measured and turned down:
 
-Browser storage holds exactly one thing: the handle for your folder. Folder
-handles cannot go into localStorage, which is why there is a database at all.
-Nothing about your recordings is kept in the app.
+- **Beam search** (better accuracy in some engines). The bundled
+  transcription engine has no beam search at all; the results were
+  byte-identical with the flag on. Verified against the engine source, with
+  the comment left in `src/worker.ts`.
+- **WebGPU acceleration** (how the browser demos are fast). WebGPU needs
+  fp32 weights, which triple the model download for no gain at Blab's sizes.
+  Wasm with all threads is the ceiling this app is built for.
+
+The same logic keeps summaries out: Blab quotes what was said, and a small
+local model writing smooth paragraphs would invent decisions nobody took.
 
 ## Contributing
 
-Fork it. Pull requests welcome.
-
-Blab has one feature on purpose. The question for any change is whether someone
-recording a talk would notice it.
-
-Things that fit: other platforms, better accuracy, faster transcription, fewer
-steps.
-
-Things that do not: accounts, sync, a server, analytics, a plugin system, or
-anything that needs the internet while it runs.
-
-Small and finished beats big and maintained. It should still work in ten years
-with nobody touching it.
+Fork it, change it, send a pull request. The repo runs the full test suite in CI on every push and pull
+request; keep it green. Feature ideas fit the project when they
+do not need a server, a login, or a bill.
 
 ## Licence
 
-MIT. Do what you want with it.
+MIT. See [LICENSE](LICENSE). What changed in each version lives on the
+[releases page](https://github.com/jurecerkez-code/Blab/releases).
+
+---
+
+*The two sections below exist so the table up top can be short. Read them
+once, and forward them to anyone who asks "is this safe to run".*
+
+## The warning on Windows and Mac
+
+Blab is free, so it is unsigned: Apple wants 99 dollars a year to not show a
+warning, and Microsoft asks for a certificate that costs the same. Blab
+cannot pay that without charging you, so you click through once. Nothing is
+switched off or weakened to manage it. The install scripts skip the warning
+on Mac, because a file a browser downloaded is marked differently from one
+`curl` fetched.
+
+## The two Linux quirks
+
+AppImages on Ubuntu 22 and older need `libfuse2` (`sudo apt install
+libfuse2`), and Chromium (the engine inside Electron) refuses to run as root,
+which is why the sandbox flag appears in the Linux commands. Neither is a
+Blab bug; both are how AppImage and Chromium behave for every app.
