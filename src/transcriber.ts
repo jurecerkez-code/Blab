@@ -100,6 +100,15 @@ export class Transcriber {
             });
           case 'failed':
             worker.removeEventListener('message', listener);
+            // A failed load can leave the engine's wasm heap half-used (seen:
+            // "failed to allocate a buffer" when a second session was created
+            // after an earlier one never got freed). The only reliable way to
+            // give the memory back is to drop the whole worker; the next job
+            // spawns a fresh one.
+            if (!msg.modelMissing) {
+              this.worker?.terminate();
+              this.worker = null;
+            }
             return reject(
               msg.modelMissing ? new ModelMissingError(msg.message) : new Error(msg.message),
             );
