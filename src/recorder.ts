@@ -47,6 +47,19 @@ class LevelProbe {
     this.analyser = null;
   }
 
+  /**
+   * Forgets the loudest thing heard so far.
+   *
+   * One probe is kept for the life of the Recorder and `peak` only ever
+   * ratchets upward, so without this a second recording inherits the first
+   * one's peak — and the "No computer audio was heard" notice is suppressed on
+   * exactly the recording where it is true. detach() is not the place for it:
+   * the peak has to survive until stop() has read it.
+   */
+  reset(): void {
+    this.peakValue = 0;
+  }
+
   get peak(): number {
     return this.peakValue;
   }
@@ -85,6 +98,7 @@ export class Recorder {
   async start({ captureSystem = false, onSystemWarning }: RecorderOptions = {}): Promise<void> {
     this.warnings = [];
     this.gotQuietSystem = false;
+    this.systemProbe.reset();
     this.stream = await navigator.mediaDevices.getUserMedia({
       // `audio: true` would take Chromium's defaults, and its defaults are
       // tuned for a voice call: keep a human on the other end comfortable,

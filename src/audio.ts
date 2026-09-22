@@ -5,12 +5,14 @@ export const SAMPLE_RATE = 16000;
 const OPUS_RATE = 48000;
 
 /**
- * How much 48 kHz audio to hold before resampling it down and letting it go.
- * Ten minutes is 28.8 M samples, about 115 MB; large enough that the seams
- * between blocks are rare, small enough to never approach the allocation
+ * How much audio to hold before resampling it down and letting it go, counted
+ * in the microseconds the container stamps its blocks with.
+ *
+ * Ten minutes is 28.8 M samples at 48 kHz, about 115 MB; large enough that the
+ * seams between blocks are rare, small enough to never approach the allocation
  * ceiling that broke the whole-file path.
  */
-const BLOCK_FRAMES = OPUS_RATE * 60 * 10;
+const BLOCK_US = 10 * 60 * 1_000_000;
 
 /**
  * Decodes a recording into the samples Whisper expects.
@@ -112,14 +114,29 @@ async function decodeInBlocks(bytes: ArrayBuffer): Promise<Float32Array | null> 
     ...(track.description ? { description: track.description } : {}),
   });
 
+  // A block boundary is decided by the packet's own timestamp, not by
+  // pendingFrames.
+  //
+  // pendingFrames is filled by the decoder's output callback, and a callback
+  // cannot run while this loop holds the thread. The loop only ever yielded
+  // inside `if (pendingFrames >= a sample count)`, so the counter was still zero
+  // every time it was read, the condition was never true, and every packet in
+  // the recording was queued before a single one was drained — the whole thing
+  // buffered at 48 kHz, which is the exact allocation this path exists to
+  // avoid. `if (failure) break` was unreachable for the same reason.
+  //
+  // The timestamps are already parsed out of the container, so the boundary
+  // costs nothing and does not assume a packet duration.
+  let blockStartUs: number | null = null;
   for (const packet of track.packets) {
     if (failure) break;
+    if (blockStartUs === null) blockStartUs = packet.timestampUs;
     // Every Opus packet stands alone, so all of them are key frames.
     decoder.decode(
       new EncodedAudioChunk({ type: 'key', timestamp: packet.timestampUs, data: packet.data }),
     );
-    // Drain periodically rather than queueing the whole recording at once.
-    if (pendingFrames >= BLOCK_FRAMES) {
+    if (packet.timestampUs - blockStartUs >= BLOCK_US) {
+      blockStartUs = null;
       await decoder.flush();
       await flush();
     }
