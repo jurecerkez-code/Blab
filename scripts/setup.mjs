@@ -16,25 +16,23 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { MODELS, VAD_REPO, plan } from './model-plan.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const HOST = 'https://huggingface.co';
 
-// The models the app can run, by the name the picker uses. Only whisper-base
-// is on the Blab mirror; the others come from HuggingFace (still one fetch,
-// still cached forever after).
-const MODELS = {
-  base: 'Xenova/whisper-base',
-  small: 'Xenova/whisper-small',
-  medium: 'Xenova/whisper-medium',
-};
-/** What a bare `npm run setup` fetches, as the header above promises. */
-const DEFAULT_MODEL = 'base';
+// The catalog and the fetch/keep decision live next door, in model-plan.mjs,
+// because they are the part worth testing and this file downloads a gigabyte
+// the moment it is imported. Only whisper-base is on the Blab mirror; the
+// others come from HuggingFace (still one fetch, still cached forever after).
 const MIRROR_MODEL = MODELS.base;
 const MIRROR = 'https://github.com/jurecerkez-code/Blab/releases/download/model-mirror';
 
 // The small voice-activity detector that lets transcription skip silence.
-const VAD = { org: 'onnx-community', model: 'silero-vad', file: 'onnx/model_quantized.onnx' };
+// Its repository path is the one in the plan, so the prune's keep-list and the
+// download below can never drift into disagreeing about what it is called.
+const [VAD_ORG, VAD_MODEL] = VAD_REPO.split('/');
+const VAD = { org: VAD_ORG, model: VAD_MODEL, file: 'onnx/model_quantized.onnx' };
 
 // Same set for every whisper model: transformers.js loads exactly these.
 const MODEL_FILES = [
@@ -56,23 +54,7 @@ const ORT_FILES = [
   'ort-wasm-simd-threaded.jsep.mjs',
 ];
 
-const want = process.argv.slice(2).join(' ').toLowerCase();
-const names = Object.keys(MODELS);
-let toFetch;
-if (want === 'all') toFetch = names;
-else if (want === 'clean') toFetch = [];
-// No argument is the documented default, and it has to be checked before the
-// search below: `''.includes('base')` is false, so an empty argv fell through
-// to the throw. That took out every release build from 0.7.0 onward — the
-// workflow runs a bare `npm run setup` — and the README's own build steps with
-// it. The models are a runtime choice now, but fetching one is still the
-// sensible thing to do when nobody named one.
-else if (!want) toFetch = [DEFAULT_MODEL];
-else {
-  const pick = names.find((n) => want.includes(n));
-  if (!pick) throw new Error(`Unknown model "${process.argv.slice(2).join(' ')}". Use: ${names.join(', ')}, all or clean.`);
-  toFetch = [pick];
-}
+const { toFetch, keep } = plan(process.argv.slice(2));
 
 const mb = (bytes) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
@@ -250,18 +232,9 @@ for (const name of toFetch) {
 }
 // The prune exists so that swapping models does not leave dead weights in
 // public/models for electron-builder to bake into the installer. It takes the
-// list of what to KEEP, and both callers used to get that list wrong.
-//
-// `all` passed [], which does not mean "keep the lot" — it means keep nothing,
-// so a gigabyte of models was downloaded and then deleted on the line after.
-// The installer built from it carried no Whisper model at all, and setup still
-// printed "all on disk" on its way out.
-//
-// The VAD is not a Whisper model and is never what the argument is about, so
-// it is kept either way; `clean` used to drop it too.
-const VAD_REPO = `${VAD.org}/${VAD.model}`;
-if (want === 'clean') await dropOtherModels([MODELS.base, VAD_REPO]);
-else if (want === 'all') await dropOtherModels([...names.map((n) => MODELS[n]), VAD_REPO]);
+// list of what to KEEP, which the plan works out and tests/setup.spec.ts pins
+// down — a null keep-list means the models accumulate and nothing is removed.
+if (keep) await dropOtherModels(keep);
 
 const modelTotal = total === 0 ? 'model files already present' : mb(total);
 console.log(`\nReady. ${modelTotal}, ${mb(ortBytes + vadBytes)} of runtime, all on disk.`);

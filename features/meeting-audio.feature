@@ -17,9 +17,16 @@ Feature: Recording an online meeting
 
   Two things it honestly cannot do. It cannot say who spoke — Whisper writes
   words, not names, so a meeting transcript is one run of speech with no labels
-  on it. And it cannot record system audio on a Mac: Electron's loopback capture
-  is Windows only, and going around that means asking people to install a
-  virtual audio device, which is a different app than this one.
+  on it. And it can only record system audio on Windows: Electron captures it
+  through a loopback device and has one there and nowhere else, and going around
+  that means asking people to install a virtual audio device, which is a
+  different app than this one.
+
+  That second limit was written here before it was true of the code. This file
+  said "Windows only" while the app offered the control on all three, passing
+  macOS a value Electron does not accept at all, so a Mac recorded the
+  microphone alone and said nothing until Stop. The scenarios below were the
+  ones nobody executed. They execute now, in tests/meeting.spec.ts.
 
   Background:
     Given Blab is open with a folder connected
@@ -100,11 +107,31 @@ Feature: Recording an online meeting
 
   # ------------------------------------------------------------------ when it will not
 
-  Scenario: On a Mac the control is not offered
-    Given I am on macOS
-    Then the meeting control is not shown
-    And nothing in the interface implies it is coming
+  Scenario: Where there is no loopback device the control is not offered
+    Given I am on macOS, or on Linux
+    Then the meeting control is disabled, not merely unticked
+    And it says "Windows only" beside it, with the reason on hover
     And the microphone still records exactly as it always did
+    # Said before the recording rather than after it. Learning at Stop that an
+    # hour of a call was the microphone alone is the whole thing to avoid.
+
+  Scenario: On Windows nothing is taken away
+    Given I am on Windows
+    Then the meeting control is offered exactly as it always was
+    And a setting I saved earlier is still honoured
+
+  Scenario: A finished recording does not hand the control back
+    Given I am on macOS, or on Linux
+    When I record and press Stop
+    Then the meeting control is still disabled
+    # The interface re-enables the row after a recording. That used to be
+    # unconditional, so the first Stop undid the check above.
+
+  Scenario: In a browser the control is left alone
+    Given Blab is running as a page rather than the desktop app
+    Then the meeting control is offered
+    # There is no shell to ask, and a browser tab can share tab audio through
+    # the picker, which is its own way of doing this.
 
   Scenario: Refusing the capture prompt
     Given the meeting setting is on
