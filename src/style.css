@@ -145,6 +145,13 @@ button.record.is-recording {
   accent-color: var(--accent);
 }
 
+/* A setting this machine cannot offer. Still readable, so the reason on it can
+   be read, but plainly not a thing to click. */
+.check.unavailable {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .pick {
   font-size: 13px;
   color: var(--muted);

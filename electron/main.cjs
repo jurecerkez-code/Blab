@@ -280,17 +280,23 @@ function allowLocalPermissions() {
   });
   // Meeting capture asks for the computer's audio, never for a picker: the
   // handler answers with the primary screen's audio loopback so the user is
-  // not choosing a capture target in the middle of a call. "loopback" is
-  // system audio on Windows and Linux; macOS needs "systemsound" plus the
-  // Screen Recording permission, and a silent result is detected at Stop and
-  // reported by the recorder.
+  // not choosing a capture target in the middle of a call.
+  //
+  // 'loopback' is the only system-audio value Electron takes, and it works on
+  // Windows alone — its own typing says so: "Specifying a loopback device will
+  // capture system audio, and is currently only supported on Windows." This
+  // used to pass 'systemsound' on macOS, which is not a value Electron accepts
+  // at all, so a Mac recorded the microphone while the checkbox said otherwise
+  // and the only hint came at Stop. The preload now reports device.systemAudio,
+  // and the page greys the checkbox out where it is false rather than letting
+  // someone record an hour of a call on a promise that cannot be kept.
   ses.setDisplayMediaRequestHandler((_request, callback) => {
     desktopCapturer
       .getSources({ types: ['screen', 'window'], thumbnailSize: { width: 1, height: 1 } })
       .then((sources) => {
         const screen = sources.find((s) => s.id.startsWith('screen')) ?? sources[0];
         if (!screen) return callback({});
-        callback({ video: screen, audio: process.platform === 'darwin' ? 'systemsound' : 'loopback' });
+        callback({ video: screen, audio: 'loopback' });
       })
       .catch(() => callback({}));
   });

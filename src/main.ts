@@ -750,7 +750,10 @@ async function stopRecording(): Promise<void> {
     ui.record.disabled = false;
     ui.title.disabled = false;
     ui.model.disabled = false;
-    ui.meeting.disabled = false;
+    // Not a plain `false`: on a machine with no loopback device this checkbox
+    // was disabled at boot and has to stay that way, or the first recording
+    // would quietly hand it back.
+    ui.meeting.disabled = Boolean(window.blab) && !window.blab?.device?.systemAudio;
   }
 
   // The audio and notes are already on disk, so a transcription problem from
@@ -883,6 +886,21 @@ ui.setupPick.addEventListener('click', () => void setupPickClicked());
 
 async function boot(): Promise<void> {
   ui.meeting.checked = savedSystemCapture();
+  // Electron records the computer's own audio through a loopback device, and
+  // it has one on Windows only. Everywhere else the checkbox could be ticked
+  // and the recording would still be the microphone alone — which is a thing
+  // to learn before a meeting rather than at the end of one. So it is turned
+  // off and says why, in the tooltip and on the label.
+  if (window.blab && !window.blab.device?.systemAudio) {
+    ui.meeting.checked = false;
+    ui.meeting.disabled = true;
+    const label = ui.meeting.closest('label');
+    if (label) {
+      label.title = 'Recording the computer’s own audio needs a loopback device, which only Windows has.';
+      label.classList.add('unavailable');
+      label.append(' — Windows only');
+    }
+  }
   // First launch only: remember the machine's sensible default so the user
   // never has to pick. The picker still works afterwards.
   if (!localStorage.getItem('blab-model')) saveModel(suggestedModel());

@@ -11,7 +11,15 @@ contextBridge.exposeInMainWorld('blab', {
    * model: Apple Silicon runs the medium model comfortably, an Intel laptop
    * does not, and the page cannot tell them apart on its own.
    */
-  device: { platform: process.platform, arch: process.arch },
+  device: {
+    platform: process.platform,
+    arch: process.arch,
+    // Whether this machine can record what the computer is playing. Electron
+    // captures system audio through a loopback device and supports that on
+    // Windows only, so the meeting checkbox has nothing to offer anywhere
+    // else. Better said before the recording than discovered after it.
+    systemAudio: process.platform === 'win32',
+  },
   /** 'granted' | 'denied' | 'restricted' | 'not-determined' | 'unsupported' */
   micStatus: () => ipcRenderer.invoke('mic:status'),
   /** Shows the system prompt if it has never been answered. Resolves true if we may record. */

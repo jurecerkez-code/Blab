@@ -173,7 +173,7 @@ export class Recorder {
     this.gotQuietSystem = Boolean(this.system) && this.systemProbe.peak < 0.02;
     if (this.gotQuietSystem) {
       this.warnings.push(
-        'No computer audio was heard. On a Mac, allow Screen Recording for Blab in System Settings; on Windows check that no other app is using the loopback device.',
+        'No computer audio was heard, so this recording is the microphone alone. On Windows, check that no other app has the loopback device; in a browser tab, the share dialog needs "Share tab audio" ticked.',
       );
     }
     this.release();

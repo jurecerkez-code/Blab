@@ -42,6 +42,11 @@ interface Window {
     /** Absolute path of the git repository the named folder is in, or null. */
     gitRoot(folderName: string): Promise<string | null>;
     /** Which machine this is, used to pick the default model at first launch. */
-    device?: { platform: string; arch: string };
+    device?: {
+      platform: string;
+      arch: string;
+      /** Whether computer audio can be recorded here. Windows only, for now. */
+      systemAudio?: boolean;
+    };
   };
 }
