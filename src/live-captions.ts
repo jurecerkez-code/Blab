@@ -58,7 +58,7 @@ export class LiveCaptions {
   private line: HTMLButtonElement | null = null;
   private ctx: AudioContext | null = null;
   private processor: ScriptProcessorNode | null = null;
-  private ring: Float32Array = new Float32Array(0);
+  private recent = new Recent(2_160_000);
   private sampleRate = 48000;
   private timer: number | undefined;
   /** Last time a window went to Whisper; never more often than once a second. */
@@ -113,8 +113,7 @@ export class LiveCaptions {
 
       node.onaudioprocess = (e) => {
         const input = e.inputBuffer.getChannelData(0);
-        this.ring = grow(this.ring, input.length);
-        this.ring.set(input, this.ring.length - input.length);
+        this.recent.append(input);
       };
 
       // ScriptProcessor needs an output; route it into a muted gain so
@@ -139,11 +138,9 @@ export class LiveCaptions {
   /** Decides whether the latest window deserves Whisper's attention. */
   private consider(now: number): void {
     if (Date.now() - this.lastSentAt < 1500) return;
-    const ring = this.ring;
-    if (ring.length < this.sampleRate * 2) return;
+    if (this.recent.length < this.sampleRate * 2) return;
     const windowLen = Math.floor((this.sampleRate * WINDOW_MS) / 1000);
-    const from = Math.max(0, ring.length - windowLen);
-    const window = ring.slice(from);
+    const window = this.recent.tail(windowLen);
     if (rms(window) < RMS_FLOOR) return;
 
     const resampler = new Resampler(this.sampleRate / TARGET_RATE);
@@ -152,7 +149,13 @@ export class LiveCaptions {
     const used = resampler.push(window, out);
 
     this.lastSentAt = Date.now();
-    const at = Math.max(0, now - WINDOW_MS);
+    // From the window that was actually taken, not from WINDOW_MS. The ring
+    // starts empty and is emptied again on every pause, and the guard above
+    // only requires two seconds, so the first caption after a resume covers
+    // two seconds while WINDOW_MS claims fifteen — stamping it thirteen
+    // seconds before it was said.
+    const windowMs = Math.round((window.length * 1000) / this.sampleRate);
+    const at = Math.max(0, now - windowMs);
     this.send(out.slice(0, used), at);
   }
 
@@ -167,17 +170,61 @@ export class LiveCaptions {
     }
     this.ctx?.close().catch(() => {});
     this.ctx = null;
-    this.ring = new Float32Array(0);
+    this.recent.clear();
   }
 }
 
-/** Appends to the ring, dropping the oldest samples past the cap. */
-function grow(ring: Float32Array, by: number): Float32Array {
-  // The ring lives at the microphone rate (usually 48 kHz), so 45 s is
-  // 2.16 M samples - comfortably over the 15 s caption window.
-  const cap = 2_160_000;
-  const keepLen = Math.min(ring.length, Math.max(0, cap - by));
-  const next = new Float32Array(keepLen + by);
-  next.set(ring.subarray(ring.length - keepLen), 0);
-  return next;
+/**
+ * The most recent samples, in a buffer that never moves.
+ *
+ * The ring lives at the microphone rate (usually 48 kHz), so the cap is 45 s
+ * at 2.16 M samples — comfortably over the 15 s caption window.
+ *
+ * This used to reallocate and copy the whole thing on every audio callback.
+ * At the cap that is 8.6 MB copied about twelve times a second, on the main
+ * thread, while a recording is in progress, to maintain a buffer only the
+ * newest fifteen seconds of which is ever read. Writing in place costs the
+ * length of the chunk instead, and only what is asked for is ever copied out.
+ *
+ * Exported for tests/live-captions.spec.ts; nothing else constructs one.
+ */
+export class Recent {
+  private buf: Float32Array;
+  /** Where the next sample goes. */
+  private head = 0;
+  private filled = 0;
+
+  constructor(private readonly cap: number) {
+    this.buf = new Float32Array(cap);
+  }
+
+  get length(): number {
+    return this.filled;
+  }
+
+  append(chunk: Float32Array): void {
+    // A chunk bigger than the whole ring can only contribute its own tail.
+    const src = chunk.length > this.cap ? chunk.subarray(chunk.length - this.cap) : chunk;
+    const untilEnd = Math.min(src.length, this.cap - this.head);
+    this.buf.set(src.subarray(0, untilEnd), this.head);
+    if (untilEnd < src.length) this.buf.set(src.subarray(untilEnd), 0);
+    this.head = (this.head + src.length) % this.cap;
+    this.filled = Math.min(this.cap, this.filled + src.length);
+  }
+
+  /** The newest `n` samples, oldest first. Shorter if that is all there is. */
+  tail(n: number): Float32Array {
+    const take = Math.min(n, this.filled);
+    const out = new Float32Array(take);
+    const start = (this.head - take + this.cap) % this.cap;
+    const untilEnd = Math.min(take, this.cap - start);
+    out.set(this.buf.subarray(start, start + untilEnd), 0);
+    if (untilEnd < take) out.set(this.buf.subarray(0, take - untilEnd), untilEnd);
+    return out;
+  }
+
+  clear(): void {
+    this.head = 0;
+    this.filled = 0;
+  }
 }

@@ -78,13 +78,32 @@ export async function speechWindows(
   const cName = lower.find((n) => n === "c" || (n.includes("c") && !n.includes("h")));
   const srName = lower.find((n) => n.includes("sr"));
   if (!audioName || !hName || !cName) throw new Error("Unexpected silero ONNX inputs");
-  const hidden = 64; // silero v4/v5 small; the state fallback below retries wider
+  let hidden = 64; // silero v4/v5 small; the state fallback below retries wider
 
   const outputs = sess.outputNames;
   const probName =
     outputs.find((n) => n.toLowerCase() === "output") ??
     outputs.find((n) => n.toLowerCase() !== hName && n.toLowerCase() !== cName) ??
     outputs[0];
+
+  // The state comes back under the model's OUTPUT names, and those are not its
+  // input names: silero is fed h and c and returns hn and cn. The loop below
+  // used to read out[hName] — the output map indexed with an input name — so
+  // it was undefined on the very first frame and threw a TypeError, whose
+  // message contains no "shape", which is the only thing the retry looks for.
+  // Between that and the size gate in the worker, VAD has never completed a
+  // single frame in a shipped build.
+  //
+  // Naming it explicitly rather than guessing: if a future silero returns its
+  // state some other way, this says so with the real names in the message
+  // instead of failing into silence.
+  const stateOuts = outputs.filter((n) => n !== probName);
+  const bare = (n: string) => n.toLowerCase().replace(/[^a-z]/g, "");
+  const hOut = stateOuts.find((n) => bare(n).startsWith("h")) ?? stateOuts[0];
+  const cOut = stateOuts.find((n) => bare(n).startsWith("c")) ?? stateOuts[1];
+  if (!hOut || !cOut || hOut === cOut) {
+    throw new Error(`Unexpected silero ONNX outputs: ${outputs.join(", ")}`);
+  }
 
   let h: Float32Array = new Float32Array(2 * hidden);
   let c: Float32Array = new Float32Array(2 * hidden);
@@ -103,8 +122,8 @@ export async function speechWindows(
     };
     if (srName) feeds[srName] = new ort.Tensor("int64", new BigInt64Array([1n]), [1]);
     const out = await sess.run(feeds);
-    h = out[hName].data as Float32Array;
-    c = out[cName].data as Float32Array;
+    h = out[hOut].data as Float32Array;
+    c = out[cOut].data as Float32Array;
     return (out[probName].data as Float32Array)[0];
   };
 
@@ -119,6 +138,10 @@ export async function speechWindows(
         c = new Float32Array(2 * 128);
         try {
           probs[f] = await runOne(f, 128);
+          // And it stays 128. Without this the next frame went back to the
+          // 64 the retry had just disproved, and fed 256-element state into
+          // a [2,1,64] tensor — so the fallback never survived one frame.
+          hidden = 128;
         } catch {
           throw err;
         }

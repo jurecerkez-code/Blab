@@ -62,6 +62,8 @@ export type FromWorker =
       segments: Segment[];
       degenerate: boolean;
       noSpeech: boolean;
+      /** The detector was installed but could not run; nothing was skipped. */
+      vadFailed: boolean;
     }
   | { type: 'live'; id: string; text: string | null; at: number }
   | { type: 'failed'; id: string; message: string; modelMissing: boolean };
@@ -88,13 +90,17 @@ class ModelMissing extends Error {}
  * public/ with index.html and a 200, which reaches onnxruntime as a baffling
  * "protobuf parsing failed" instead of anything about a missing file.
  */
-async function modelIsInstalled(url: string): Promise<boolean> {
+async function modelIsInstalled(url: string, minBytes = 1_000_000): Promise<boolean> {
   try {
     const res = await fetch(url, { method: 'HEAD' });
     if (!res.ok) return false;
     if ((res.headers.get('content-type') ?? '').includes('text/html')) return false;
-    // The real file is many MB; anything tiny is a stand-in page, not weights.
-    return Number(res.headers.get('content-length')) > 1_000_000;
+    // Whisper weights are many MB; anything tiny is a stand-in page, not a
+    // model. The floor is a parameter because it is not the same number for
+    // every model here: the silero detector is 0.6 MB, and a flat 1 MB test
+    // marked it missing on every machine, which is why voice-activity
+    // detection has never once run in a shipped build.
+    return Number(res.headers.get('content-length')) > minBytes;
   } catch {
     return false;
   }
@@ -173,6 +179,13 @@ class PartialStreamer extends TextStreamer {
     super.put([filterTimestampTokens(value[0])]);
   }
   override end(): void {
+    // super first, and it is not optional. TextStreamer.end() is what flushes
+    // the tail of the chunk through callback_function and clears token_cache
+    // and print_len. Without it the last few tokens of every chunk never
+    // reached `acc`, the cache grew for the whole recording so each chunk
+    // re-decoded everything before it, and skip_prompt stopped applying from
+    // the second chunk on.
+    super.end();
     this.done = Math.min(this.done + 1, this.total);
     post({ type: 'progress', id: this.id, done: this.done, total: this.total });
     this.onPartial(this.id, this.acc);
@@ -292,7 +305,10 @@ async function runTranscribe(
     let source = audio;
     let offsets: ReturnType<typeof assembleSpeech>['offsets'] = [];
     let vadFailed = false;
-    if (await modelIsInstalled(vadWeights(modelPath))) {
+    // 100 KB, not the Whisper default: the silero detector is 0.6 MB and the
+    // 1 MB floor rejected it every time, so this branch has never run. A
+    // stand-in HTML page is a few KB and is still refused.
+    if (await modelIsInstalled(vadWeights(modelPath), 100_000)) {
       try {
         const windows = await speechWindows(audio, vadWeights(modelPath), ortPath);
         if (windows.length) {
@@ -351,6 +367,7 @@ async function runTranscribe(
       segments,
       degenerate: vadFailed ? false : await looping(text),
       noSpeech,
+      vadFailed,
     });
   } catch (err) {
     // A failed load must not be cached, or every later attempt fails too. A

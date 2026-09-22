@@ -7,7 +7,14 @@ export type { Segment };
  * The words, and where each phrase sits in the audio. `segments` is empty only
  * if Whisper returned no timestamps at all; `text` is always the whole thing.
  */
-export type Transcript = { text: string; segments: Segment[]; degenerate: boolean; noSpeech: boolean };
+export type Transcript = {
+  text: string;
+  segments: Segment[];
+  degenerate: boolean;
+  noSpeech: boolean;
+  /** The silence detector was there and did not work; nothing was skipped. */
+  vadFailed: boolean;
+};
 
 export type Progress =
   | { stage: 'loading' }
@@ -123,6 +130,7 @@ export class Transcriber {
               segments: msg.segments,
               degenerate: msg.degenerate,
               noSpeech: msg.noSpeech,
+              vadFailed: msg.vadFailed,
             });
           case 'failed':
             worker.removeEventListener('message', listener);
@@ -166,7 +174,20 @@ export class Transcriber {
     return new Promise((resolve) => {
       const listener = (event: MessageEvent<FromWorker>) => {
         const msg = event.data;
-        if (msg.type !== 'live' || msg.id !== id) return;
+        // 'loading' carries no id, so it has to be shed before anything reads
+        // one off the message.
+        if (msg.type === 'loading') return;
+        if (msg.id !== id) return;
+        // A caption that failed is still a caption that finished. This promise
+        // is what the queue chains on, so a live job that could only ever
+        // resolve would hold the queue open for good if the worker died first,
+        // and every later transcription would wait behind it silently.
+        if (msg.type === 'failed') {
+          worker.removeEventListener('message', listener);
+          onResult(null, at);
+          return resolve();
+        }
+        if (msg.type !== 'live') return;
         worker.removeEventListener('message', listener);
         onResult(msg.text, msg.at);
         resolve();

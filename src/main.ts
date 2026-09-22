@@ -789,6 +789,13 @@ async function transcribeInto(dir: FileSystemDirectoryHandle, name: string): Pro
       },
     );
 
+    // Not fatal — the transcript is complete either way — but silence
+    // skipping is a headline of this app and it failing quietly is how it
+    // came to be broken in every build from 0.7.0 on without anyone noticing.
+    if (result.vadFailed) {
+      say('The silence detector could not run, so the whole recording was transcribed.', true);
+    }
+
     if (result.noSpeech) {
       say('No speech found in the recording, so nothing was transcribed.');
       return;
