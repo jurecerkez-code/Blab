@@ -4,7 +4,7 @@
 // export on HuggingFace is gated behind an agreement, and the public
 // onnx-community export has no config.json, so transformers.js refuses it.
 // The raw ONNX is small (640 KB) and speaks a fixed protocol; one 512-sample
-// frame in, one speech probability out, plus two state tensors that carry
+// frame in, one speech probability out, plus the state tensors that carry
 // over to the next frame; so driving it directly is less code than working
 // around the wrapper, and it runs inside the same worker with the same
 // vendored wasm.
@@ -55,6 +55,56 @@ async function vadSession(weights: string, ortPath: string): Promise<ort.Inferen
 // ---------------------------------------------------------------- the loop
 
 /**
+ * Which tensors to feed and which to read back, worked out from the model's
+ * own names.
+ *
+ * Silero ships in two shapes and the export decides which. v4 is fed h and c
+ * and returns hn and cn: two state tensors, [2,1,64] each. v5 carries one
+ * combined state, [2,1,128], in and out. The model installed here is v5:
+ *
+ *   INPUTS  input, state, sr        OUTPUTS  output, stateN
+ *
+ * None of which was detected. The old code hunted for inputs literally named
+ * h and c, found neither, and threw "Unexpected silero ONNX inputs" before a
+ * single frame ever ran — which, with the size gate in the worker, is why
+ * voice-activity detection never worked in a shipped build. Reading the names
+ * and counting the state tensors covers both without this code needing to
+ * know which version it was handed.
+ *
+ * Pure, and exported, so tests/vad.spec.ts can hold it to both shapes without
+ * a model on disk.
+ */
+export function sileroPlan(
+  inputs: readonly string[],
+  outputs: readonly string[],
+): {
+  audioName: string;
+  srName: string | undefined;
+  stateIns: string[];
+  stateOuts: string[];
+  hidden: number;
+} {
+  const isRate = (n: string) => n.toLowerCase().includes("sr");
+  const audioName =
+    inputs.find((n) => n.toLowerCase() === "input") ?? inputs.find((n) => !isRate(n)) ?? inputs[0];
+  const srName = inputs.find(isRate);
+  const stateIns = inputs.filter((n) => n !== audioName && n !== srName);
+
+  const probName = outputs.find((n) => n.toLowerCase() === "output") ?? outputs[0];
+  // The state comes back under the OUTPUT names, which are never the input
+  // names. Reading out[hName] was the output map indexed with an input name.
+  const stateOuts = outputs.filter((n) => n !== probName);
+
+  if (!audioName || !stateIns.length || stateIns.length !== stateOuts.length) {
+    throw new Error(
+      `Unexpected silero ONNX: inputs ${inputs.join(", ")}; outputs ${outputs.join(", ")}`,
+    );
+  }
+  // One combined state is v5 and 128 wide; a separate h and c is v4 at 64.
+  return { audioName, srName, stateIns, stateOuts, hidden: stateIns.length === 1 ? 128 : 64 };
+}
+
+/**
  * Speech windows for one recording. Pure function of the samples.
  *
  * Silero is a stateful model: the state rows of a batch are independent
@@ -71,42 +121,15 @@ export async function speechWindows(
   ortPath: string,
 ): Promise<SpeechWindow[]> {
   const sess = await vadSession(weights, ortPath);
-  const lower = sess.inputNames.map((n) => n.toLowerCase());
-
-  const audioName = lower.find((n) => n !== "h" && n !== "c" && !n.includes("sr")) ?? lower[0];
-  const hName = lower.find((n) => n === "h" || (n.includes("h") && !n.includes("c")));
-  const cName = lower.find((n) => n === "c" || (n.includes("c") && !n.includes("h")));
-  const srName = lower.find((n) => n.includes("sr"));
-  if (!audioName || !hName || !cName) throw new Error("Unexpected silero ONNX inputs");
-  let hidden = 64; // silero v4/v5 small; the state fallback below retries wider
-
   const outputs = sess.outputNames;
-  const probName =
-    outputs.find((n) => n.toLowerCase() === "output") ??
-    outputs.find((n) => n.toLowerCase() !== hName && n.toLowerCase() !== cName) ??
-    outputs[0];
+  const { audioName, srName, stateIns, stateOuts, hidden: hidden0 } = sileroPlan(
+    sess.inputNames,
+    outputs,
+  );
+  const probName = outputs.find((n) => n.toLowerCase() === "output") ?? outputs[0];
+  let hidden = hidden0;
+  let state: Float32Array[] = stateIns.map(() => new Float32Array(2 * hidden));
 
-  // The state comes back under the model's OUTPUT names, and those are not its
-  // input names: silero is fed h and c and returns hn and cn. The loop below
-  // used to read out[hName] — the output map indexed with an input name — so
-  // it was undefined on the very first frame and threw a TypeError, whose
-  // message contains no "shape", which is the only thing the retry looks for.
-  // Between that and the size gate in the worker, VAD has never completed a
-  // single frame in a shipped build.
-  //
-  // Naming it explicitly rather than guessing: if a future silero returns its
-  // state some other way, this says so with the real names in the message
-  // instead of failing into silence.
-  const stateOuts = outputs.filter((n) => n !== probName);
-  const bare = (n: string) => n.toLowerCase().replace(/[^a-z]/g, "");
-  const hOut = stateOuts.find((n) => bare(n).startsWith("h")) ?? stateOuts[0];
-  const cOut = stateOuts.find((n) => bare(n).startsWith("c")) ?? stateOuts[1];
-  if (!hOut || !cOut || hOut === cOut) {
-    throw new Error(`Unexpected silero ONNX outputs: ${outputs.join(", ")}`);
-  }
-
-  let h: Float32Array = new Float32Array(2 * hidden);
-  let c: Float32Array = new Float32Array(2 * hidden);
   const frames = Math.ceil(audio.length / FRAME);
   const probs = new Float32Array(frames);
 
@@ -117,13 +140,18 @@ export async function speechWindows(
     if (take > 0) x.set(audio.subarray(at, at + take));
     const feeds: Record<string, ort.Tensor> = {
       [audioName]: new ort.Tensor("float32", x, [1, FRAME]),
-      [hName]: new ort.Tensor("float32", h, [2, 1, hiddenSize]),
-      [cName]: new ort.Tensor("float32", c, [2, 1, hiddenSize]),
     };
-    if (srName) feeds[srName] = new ort.Tensor("int64", new BigInt64Array([1n]), [1]);
+    stateIns.forEach((name, i) => {
+      feeds[name] = new ort.Tensor("float32", state[i], [2, 1, hiddenSize]);
+    });
+    // The sample rate, not 1. Silero takes 16000 or 8000 here, and everything
+    // reaching this point has already been resampled to the 16 kHz Whisper
+    // wants. A 1 is not a rate silero knows.
+    if (srName) {
+      feeds[srName] = new ort.Tensor("int64", new BigInt64Array([BigInt(SAMPLE_RATE)]), [1]);
+    }
     const out = await sess.run(feeds);
-    h = out[hOut].data as Float32Array;
-    c = out[cOut].data as Float32Array;
+    state = stateOuts.map((name) => out[name].data as Float32Array);
     return (out[probName].data as Float32Array)[0];
   };
 
@@ -131,23 +159,15 @@ export async function speechWindows(
     try {
       probs[f] = await runOne(f, hidden);
     } catch (err) {
-      // The first call can fail on a wrong guess at the hidden size. Retry the
-      // whole pass with the next candidate, then give up.
-      if (hidden === 64 && (err as Error).message.includes("shape")) {
-        h = new Float32Array(2 * 128);
-        c = new Float32Array(2 * 128);
-        try {
-          probs[f] = await runOne(f, 128);
-          // And it stays 128. Without this the next frame went back to the
-          // 64 the retry had just disproved, and fed 256-element state into
-          // a [2,1,64] tensor — so the fallback never survived one frame.
-          hidden = 128;
-        } catch {
-          throw err;
-        }
-      } else {
-        throw err;
-      }
+      // The width is inferred from how many state tensors there are, so if it
+      // was wrong the other candidate is the only one left. A mismatch shows
+      // up on the first frame or not at all. The old retry passed 128 to one
+      // call while the variable stayed 64, so it never survived into frame 2.
+      if (f !== 0) throw err;
+      const other = hidden === 64 ? 128 : 64;
+      state = stateIns.map(() => new Float32Array(2 * other));
+      probs[f] = await runOne(f, other);
+      hidden = other;
     }
   }
 
