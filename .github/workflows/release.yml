@@ -69,6 +69,44 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
+      # One dmg is supposed to run on an Intel Mac and on an M-series, and
+      # nothing in the build objects if that quietly becomes one of them: the
+      # file has the same name, the same shape, and uploads the same way. Half
+      # the Macs in the world would be the ones to find out. So mount what was
+      # actually built and ask the binary inside which chips it holds, rather
+      # than trusting that the arch in package.json survived the trip.
+      - name: The dmg must carry both chips
+        if: runner.os == 'macOS'
+        run: |
+          set -eu
+          dmg=$(ls Blab-*.dmg)
+          hdiutil attach "$dmg" -nobrowse -quiet -mountpoint /tmp/blab-dmg
+          archs=$(lipo -archs '/tmp/blab-dmg/Blab.app/Contents/MacOS/Blab')
+          hdiutil detach /tmp/blab-dmg -quiet
+          echo "$dmg carries: $archs"
+          for want in x86_64 arm64; do
+            case " $archs " in
+              *" $want "*) ;;
+              *) echo "::error::$dmg has no $want slice (found: $archs)"; exit 1 ;;
+            esac
+          done
+
+      # A release asset is capped at 2 GB by GitHub. Three models in one
+      # installer puts the dmg within sight of that, and the upload is the
+      # place it would be discovered — after every build has already run.
+      - name: No installer may exceed the 2 GB release limit
+        shell: bash
+        run: |
+          set -eu
+          for f in ${{ matrix.installer }}; do
+            bytes=$(wc -c < "$f")
+            printf '%s is %s MB\n' "$f" "$((bytes / 1000000))"
+            if [ "$bytes" -gt 2000000000 ]; then
+              echo "::error::$f is over the 2 GB limit for a release asset."
+              exit 1
+            fi
+          done
+
       - uses: actions/upload-artifact@v4
         with:
           name: installer-${{ matrix.os }}

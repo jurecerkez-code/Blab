@@ -248,8 +248,20 @@ let total = 0;
 for (const name of toFetch) {
   total += await fetchModel(name);
 }
-if (want === 'clean') await dropOtherModels(['Xenova/whisper-base']);
-else if (toFetch.length === names.length) await dropOtherModels([]);
+// The prune exists so that swapping models does not leave dead weights in
+// public/models for electron-builder to bake into the installer. It takes the
+// list of what to KEEP, and both callers used to get that list wrong.
+//
+// `all` passed [], which does not mean "keep the lot" — it means keep nothing,
+// so a gigabyte of models was downloaded and then deleted on the line after.
+// The installer built from it carried no Whisper model at all, and setup still
+// printed "all on disk" on its way out.
+//
+// The VAD is not a Whisper model and is never what the argument is about, so
+// it is kept either way; `clean` used to drop it too.
+const VAD_REPO = `${VAD.org}/${VAD.model}`;
+if (want === 'clean') await dropOtherModels([MODELS.base, VAD_REPO]);
+else if (want === 'all') await dropOtherModels([...names.map((n) => MODELS[n]), VAD_REPO]);
 
 const modelTotal = total === 0 ? 'model files already present' : mb(total);
 console.log(`\nReady. ${modelTotal}, ${mb(ortBytes + vadBytes)} of runtime, all on disk.`);
