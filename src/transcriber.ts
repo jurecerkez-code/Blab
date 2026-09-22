@@ -26,15 +26,41 @@ const abs = (path: string) => new URL(path, document.baseURI).href;
 export class Transcriber {
   private worker: Worker | null = null;
   private jobs = 0;
-  /** A full or live job is running right now. Live jobs skip when this is set. */
-  private inFlight = false;
+  /** Jobs handed over but not yet finished. Live jobs skip when this is set. */
+  private running = 0;
   /** Jobs run one after another; the model holds state we must not share. */
   private queue: Promise<unknown> = Promise.resolve();
 
-  private track<T>(p: Promise<T>): Promise<T> {
-    this.inFlight = true;
-    const done = this.queue.then(() => p).finally(() => {
-      this.inFlight = false;
+  /**
+   * How the worker is made. Only tests pass anything: the real one loads
+   * transformers.js and a model, which is not something a spec can wait for.
+   */
+  constructor(
+    private makeWorker: () => Worker = () =>
+      new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }),
+  ) {}
+
+  private get inFlight(): boolean {
+    return this.running > 0;
+  }
+
+  /**
+   * Runs `start` once everything already queued has finished.
+   *
+   * It takes a function rather than a promise, and that is the whole point.
+   * `track(this.send(...))` evaluates the send first, and the send posts to the
+   * worker synchronously inside its Promise executor — so the job reached the
+   * worker before anything was chained, and the chain only sequenced when each
+   * caller heard back. Two recordings finishing close together ran two
+   * generations at once against one cached pipeline, which holds decoder state
+   * between calls.
+   */
+  private track<T>(start: () => Promise<T>): Promise<T> {
+    // Counted from the moment it is handed over, not from the moment it runs,
+    // so a caption offered while something is merely queued is still dropped.
+    this.running++;
+    const done = this.queue.then(start).finally(() => {
+      this.running--;
     });
     this.queue = done.catch(() => {});
     return done;
@@ -53,7 +79,7 @@ export class Transcriber {
     onProgress: (p: Progress) => void,
     onPartial?: (text: string) => void,
   ): Promise<Transcript> {
-    return this.track(this.sendTranscribe(audio, model, onProgress, onPartial));
+    return this.track(() => this.sendTranscribe(audio, model, onProgress, onPartial));
   }
 
   /**
@@ -67,7 +93,7 @@ export class Transcriber {
     onResult: (text: string | null, at: number) => void,
   ): void {
     if (this.inFlight) return;
-    void this.track(this.sendLive(audio, model, at, onResult));
+    void this.track(() => this.sendLive(audio, model, at, onResult));
   }
 
   private sendTranscribe(
@@ -160,7 +186,7 @@ export class Transcriber {
   }
 
   private spawn(): Worker {
-    this.worker ??= new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
+    this.worker ??= this.makeWorker();
     return this.worker;
   }
 }
