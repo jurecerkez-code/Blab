@@ -38,18 +38,26 @@ jobs:
             installer: Blab-*.AppImage
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      # 22, not 20: electron-builder pulls node-abi, which declares
+      # `node: >=22.12.0`, so packaging on 20 runs it outside its own supported
+      # range and npm says so on every install.
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - run: npm ci
 
       # The one network moment in the project: the Whisper weights, which are
       # not in git and are baked into the installer.
-      - run: npm run setup
+      #
+      # `all`, explicitly. A release ships Fast, Balanced and Best inside the
+      # installer and the app picks between them on first launch, so a build
+      # that fetched one model would produce an installer missing two of the
+      # three it offers.
+      - run: npm run setup all
 
       - run: npm run build
 

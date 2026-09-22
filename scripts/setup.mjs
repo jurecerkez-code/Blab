@@ -28,6 +28,8 @@ const MODELS = {
   small: 'Xenova/whisper-small',
   medium: 'Xenova/whisper-medium',
 };
+/** What a bare `npm run setup` fetches, as the header above promises. */
+const DEFAULT_MODEL = 'base';
 const MIRROR_MODEL = MODELS.base;
 const MIRROR = 'https://github.com/jurecerkez-code/Blab/releases/download/model-mirror';
 
@@ -59,6 +61,13 @@ const names = Object.keys(MODELS);
 let toFetch;
 if (want === 'all') toFetch = names;
 else if (want === 'clean') toFetch = [];
+// No argument is the documented default, and it has to be checked before the
+// search below: `''.includes('base')` is false, so an empty argv fell through
+// to the throw. That took out every release build from 0.7.0 onward — the
+// workflow runs a bare `npm run setup` — and the README's own build steps with
+// it. The models are a runtime choice now, but fetching one is still the
+// sensible thing to do when nobody named one.
+else if (!want) toFetch = [DEFAULT_MODEL];
 else {
   const pick = names.find((n) => want.includes(n));
   if (!pick) throw new Error(`Unknown model "${process.argv.slice(2).join(' ')}". Use: ${names.join(', ')}, all or clean.`);
