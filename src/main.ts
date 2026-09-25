@@ -7,7 +7,7 @@ import { MODELS, modelById, savedModel, saveModel, savedSystemCapture, saveSyste
 import { NoteClock } from './notes';
 import { Recorder, formatDuration } from './recorder';
 import { forgetRoot, recallRoot, rememberRoot } from './store';
-import { type Line, parse, render, stamp, toSrt, toVtt } from './timeline';
+import { type Line, parse, plainText, render, stamp, toSrt, toVtt } from './timeline';
 import { ModelMissingError, Transcriber } from './transcriber';
 import {
   AUDIO,
@@ -396,7 +396,14 @@ function actions(
   const copy = document.createElement('button');
   copy.textContent = 'Copy all';
   copy.addEventListener('click', async () => {
-    if (await copyToClipboard(asOneBlock(rec, view, notes, transcript))) {
+    // Copy all means the words and nothing else: pure text, no stamps, no
+    // headings. The stamped version stays available through Save .md.
+    const text = transcript?.trim() ? plainText(transcript) : notes?.trim() || '';
+    if (!text) {
+      say('Nothing to copy yet. Record and transcribe first.', true);
+      return;
+    }
+    if (await copyToClipboard(text)) {
       copy.textContent = 'Copied';
       setTimeout(() => (copy.textContent = 'Copy all'), 1500);
     } else {
@@ -508,7 +515,7 @@ function asOneBlock(
     notes?.trim() || '(none)',
     '',
     '## Transcript',
-    transcript?.trim() || '(none)',
+    transcript?.trim() ? plainText(transcript) : '(none)',
     '',
   );
   return out.join('\n');

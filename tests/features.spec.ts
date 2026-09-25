@@ -129,3 +129,22 @@ test('Timed transcripts export to SRT and VTT', async ({ page }) => {
   expect(out.vtt).toContain('WEBVTT');
   expect(out.vtt).toContain('00:00:04.500 --> 00:00:09.200\nTwo');
 });
+
+test('Copy all gives pure text: every word, no stamps, no headings', async ({ page }) => {
+  const out = await page.evaluate(async () => {
+    const { plainText } = await import('/src/timeline.ts');
+    const stamped = [
+      '[00:05] I need another prompt basically to explain',
+      '[00:12] the system on how to delegate.',
+      '[1:02:03] all of those 744 cases needs to put in some sort',
+    ].join('\n');
+    const untimed = 'just words, no stamps here';
+    return { plain: plainText(stamped), untimed: plainText(untimed) };
+  });
+  expect(out.plain).toBe(
+    'I need another prompt basically to explain\nthe system on how to delegate.\nall of those 744 cases needs to put in some sort',
+  );
+  expect(out.plain).not.toContain('[');
+  // An old transcript saved before Blab timed it copies exactly as it is.
+  expect(out.untimed).toBe('just words, no stamps here');
+});
