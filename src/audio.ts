@@ -4,6 +4,9 @@ export const SAMPLE_RATE = 16000;
 /** Opus always decodes at 48 kHz, whatever we ask for afterwards. */
 const OPUS_RATE = 48000;
 
+/** Peak the gain may lift a quiet recording by, as a multiplier: 20 dB. */
+const MAX_GAIN = 10;
+
 /**
  * How much audio to hold before resampling it down and letting it go, counted
  * in the microseconds the container stamps its blocks with.
@@ -28,7 +31,7 @@ export async function decodeForWhisper(audio: Blob): Promise<Float32Array> {
   try {
     const ctx = new OfflineAudioContext(1, 1, SAMPLE_RATE);
     const buffer = await ctx.decodeAudioData(bytes.slice(0));
-    return toMono(buffer);
+    return normalizeLevel(toMono(buffer));
   } catch (err) {
     // Anything past roughly ninety minutes lands here. decodeAudioData has to
     // hold the entire file at Opus's native 48 kHz before it can resample it
@@ -37,9 +40,29 @@ export async function decodeForWhisper(audio: Blob): Promise<Float32Array> {
     // file gives, which is why this looked like a broken recording rather than
     // a long one. Decoding packet by packet never needs that allocation.
     const streamed = await decodeInBlocks(bytes).catch(() => null);
-    if (streamed) return streamed;
+    if (streamed) return normalizeLevel(streamed);
     throw err;
   }
+}
+
+/**
+ * Quiet recordings starve both listeners: the silence detector reads 0.3 on
+ * real speech and drops the words, and Whisper guesses at what it can barely
+ * hear. Bring the loudest peak up to a healthy level, capped so an already
+ * loud recording is untouched and a near silent one is not amplified into
+ * pure hiss. Peaks at 0.3 or above stay exactly as they are.
+ */
+export function normalizeLevel(samples: Float32Array): Float32Array {
+  let peak = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const a = Math.abs(samples[i]);
+    if (a > peak) peak = a;
+  }
+  if (peak >= 0.3 || peak === 0) return samples;
+  const gain = Math.min(MAX_GAIN, 0.95 / peak);
+  const out = new Float32Array(samples.length);
+  for (let i = 0; i < samples.length; i++) out[i] = samples[i] * gain;
+  return out;
 }
 
 /** Folds an AudioBuffer down to one channel of samples. */

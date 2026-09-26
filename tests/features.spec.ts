@@ -173,3 +173,23 @@ test('Overlapping transcript writes all land, one at a time', async ({ page }) =
   expect(out.text).toBe('four');
   expect(out.names).not.toContain('transcript.md.part');
 });
+
+test('a quiet recording is lifted to a healthy level, capped', async ({ page }) => {
+  const out = await page.evaluate(async () => {
+    const { normalizeLevel } = await import('/src/audio.ts');
+    const quiet = new Float32Array([0.001, -0.002, 0.2]);
+    const loud = new Float32Array([0.5, -0.8, 0.1]);
+    const tiny = new Float32Array(1000); // pure digital silence
+    return {
+      quiet: normalizeLevel(quiet),
+      loud: normalizeLevel(loud),
+      tiny: normalizeLevel(tiny).length,
+    };
+  });
+  // Peak 0.2 gains to 0.95, everything scales together.
+  expect(out.quiet[2]).toBeCloseTo(0.95, 3);
+  expect(out.quiet[0]).toBeCloseTo(0.00475, 5);
+  // A loud recording passes through untouched.
+  expect(out.loud[1]).toBeCloseTo(-0.8, 5);
+  expect(out.tiny).toBe(1000);
+});

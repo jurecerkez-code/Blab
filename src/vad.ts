@@ -18,12 +18,23 @@ import * as ort from "onnxruntime-web";
 /** Silero's fixed frame size: 32 ms at 16 kHz. */
 const FRAME = 512;
 const SAMPLE_RATE = 16000;
-/** sigmoid(this or higher) counts as speech. */
+/** sigmoid(this or higher) starts a speech run. */
 const THRESHOLD = 0.5;
+/**
+ * A run already going survives a dip to this. A quiet mic flickers 0.3 to 0.9
+ * mid-word (measured on a real recording: whole sentences at 0.1 to 0.3 that
+ * are plainly speech); ending the run on every dip below 0.5 shredded them.
+ * Below this low line the run really is over.
+ */
+const HOLD_THRESHOLD = 0.35;
 /** A run shorter than this many frames is a blip, not a word. */
 const MIN_SPEECH_FRAMES = 8; // 0.25 s
-/** A gap wider than this many frames splits two windows. */
-const MIN_SILENCE_FRAMES = 6; // ~0.19 s
+/**
+ * A gap wider than this many frames splits two windows. Half a second: a
+ * breathing pause stays inside one window, which is what Whisper wants, and
+ * a sentence break still splits.
+ */
+const MIN_SILENCE_FRAMES = 32; // 0.5 s
 /** Kept around each window so a word cut at the edge survives. */
 export const PAD_SAMPLES = 5600; // 0.35 s
 
@@ -171,28 +182,40 @@ export async function speechWindows(
     }
   }
 
-  // Frames to windows, with the standard hangover smoothing.
+  return windowsFromProbs(probs);
+}
+
+/**
+ * Frames to windows, with the standard hangover smoothing and a hysteresis:
+ * a run starts at THRESHOLD and holds to HOLD_THRESHOLD, so the flicker of a
+ * quiet mic does not shred one sentence into fragments the builder then drops
+ * for being too short. Pure and exported for tests.
+ */
+export function windowsFromProbs(probs: Float32Array): SpeechWindow[] {
   const windows: SpeechWindow[] = [];
   let runStart = -1;
+  let lastSpeech = -1;
   let silence = 0;
-  for (let f = 0; f < frames; f++) {
-    const speech = probs[f] >= THRESHOLD;
+  for (let f = 0; f < probs.length; f++) {
+    const p = probs[f];
+    const speech = runStart >= 0 ? p >= HOLD_THRESHOLD : p >= THRESHOLD;
     if (speech) {
       silence = 0;
+      lastSpeech = f;
       if (runStart < 0) runStart = f;
     } else if (runStart >= 0) {
       silence++;
       if (silence > MIN_SILENCE_FRAMES) {
-        if (f - silence - runStart >= MIN_SPEECH_FRAMES) {
-          windows.push({ start: runStart * FRAME, end: (f - silence) * FRAME });
+        if (lastSpeech - runStart + 1 >= MIN_SPEECH_FRAMES) {
+          windows.push({ start: runStart * FRAME, end: (lastSpeech + 1) * FRAME });
         }
         runStart = -1;
         silence = 0;
       }
     }
   }
-  if (runStart >= 0 && frames - runStart >= MIN_SPEECH_FRAMES) {
-    windows.push({ start: runStart * FRAME, end: frames * FRAME });
+  if (runStart >= 0 && lastSpeech - runStart + 1 >= MIN_SPEECH_FRAMES) {
+    windows.push({ start: runStart * FRAME, end: (lastSpeech + 1) * FRAME });
   }
   return windows;
 }
@@ -206,20 +229,32 @@ export function assembleSpeech(
   audio: Float32Array,
   windows: SpeechWindow[],
 ): { samples: Float32Array; offsets: Offset[] } {
-  const total = windows.reduce((n, w) => n + w.end - w.start + 2 * PAD_SAMPLES, 0);
+  // Two windows closer than two pads would copy the same stretch of recording
+  // twice, and Whisper then hears a stutter that was never said. Cut each
+  // copy's head at the previous copy's tail; a window already fully covered
+  // by the one before it is skipped outright.
+  const copies: { start: number; end: number }[] = [];
+  let prevEnd = 0;
+  for (const w of windows) {
+    const start = Math.max(0, w.start - PAD_SAMPLES, prevEnd);
+    const end = Math.min(audio.length, w.end + PAD_SAMPLES);
+    if (end <= start) continue;
+    copies.push({ start, end });
+    prevEnd = end;
+  }
+
+  const total = copies.reduce((n, c) => n + c.end - c.start, 0);
   const samples = new Float32Array(total);
   const offsets: Offset[] = [];
   let at = 0;
-  for (const w of windows) {
-    const start = Math.max(0, w.start - PAD_SAMPLES);
-    const end = Math.min(audio.length, w.end + PAD_SAMPLES);
-    samples.set(audio.subarray(start, end), at);
+  for (const c of copies) {
+    samples.set(audio.subarray(c.start, c.end), at);
     offsets.push({
       concatSec: at / SAMPLE_RATE,
-      realSec: start / SAMPLE_RATE,
-      lenSec: (end - start) / SAMPLE_RATE,
+      realSec: c.start / SAMPLE_RATE,
+      lenSec: (c.end - c.start) / SAMPLE_RATE,
     });
-    at += end - start;
+    at += c.end - c.start;
   }
   return { samples, offsets };
 }

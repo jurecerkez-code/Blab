@@ -6,7 +6,7 @@
 // returns output/stateN, so detection threw before a frame ever ran — and the
 // worker swallowed it. Names in, plan out, no model required.
 import { expect, test } from '@playwright/test';
-import { sileroPlan } from '../src/vad';
+import { assembleSpeech, sileroPlan, windowsFromProbs } from '../src/vad';
 
 // Exactly what onnx reports for the model in public/models, read off the
 // installed file rather than assumed.
