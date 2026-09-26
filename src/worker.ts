@@ -67,7 +67,7 @@ export type FromWorker =
       vadFailed: boolean;
     }
   | { type: 'live'; id: string; text: string | null; at: number }
-  | { type: 'failed'; id: string; message: string; modelMissing: boolean; oom?: boolean };
+  | { type: 'failed'; id: string; message: string; modelMissing: boolean; oom?: boolean }
 
 const post = (msg: FromWorker) => self.postMessage(msg);
 
@@ -263,16 +263,22 @@ function settings(streamer: TextStreamer) {
     // real loop walks straight around it. One recording came back as
     // hundreds of "ti ki pi si" in every order: four tokens rearranged give
     // thousands of technically distinct six-grams, none of them a repeat.
-    // This penalises a token for having been used at all, so a rotation
-    // through a tiny vocabulary decays instead of running forever. Kept mild
-    //; real speech reuses common words constantly and a heavy hand here
-    // starts rewriting honest sentences.
-    repetition_penalty: 1.15,
-    // A hard ceiling on how long one 30 s chunk may run. Whisper can get stuck
-    // and emit tokens almost forever; 224 tokens is generous for what a person
-    // can say in 30 seconds, and it caps the runaway case immediately. This is
-    // whisper.cpp's --max-len default, adopted wholesale.
-    max_new_tokens: 224,
+    // REMOVED: repetition_penalty. It taxed every reused token, and Whisper
+    // reuses its timestamp tokens between every phrase, so on dense audio the
+    // penalty piled up until ending the chunk beat continuing it: recordings
+    // came back cut short, always a little past the halfway mark of a chunk.
+    // Measured on a real recording: with the penalty the text stops at 37 s,
+    // without it the same audio decodes complete. Loop defence stays with the
+    // n-gram ban above and the degenerate loop detector, which catches the
+    // token-rotation loops a repeat ban cannot.
+    // A hard ceiling on how long one 30 s chunk may run. Whisper cannot go
+    // past 448 for a 30 s window anyway, so this is also the runaway cap.
+    // It sat at 224, "generous for what a person can say in 30 seconds",
+    // until silence skipping and level normalisation made the chunks dense:
+    // thirty seconds of non stop speech plus its timestamp tokens runs to
+    // 300 or more, and the cap cut every dense chunk short, dropping the
+    // tail of recording after recording.
+    max_new_tokens: 448,
     // Explicit greedy, matching whisper.cpp's temperature 0 default. Do not
     // read this as "we tried sampling and chose not to": transformers.js has no
     // temperature fallback loop, and no beam search either (its seq2seq path
