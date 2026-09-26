@@ -60,6 +60,16 @@ export function render(lines: Line[]): string {
 }
 
 /**
+ * The same block with the stamps stripped: the transcript as pure text. The
+ * stamps stay in the file on disk because the player and the subtitle exports
+ * need them. This is for everything a human pastes or reads: the transcript
+ * body is words and nothing else.
+ */
+export function plainText(text: string): string {
+  return parse(text)?.map((l) => l.text.trim()).join('\n') ?? text.trim();
+}
+
+/**
  * One subtitle cue per line. The end of a cue is the start of the next one;
  * the last cue runs a short while after its own start.
  */

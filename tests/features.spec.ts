@@ -129,3 +129,47 @@ test('Timed transcripts export to SRT and VTT', async ({ page }) => {
   expect(out.vtt).toContain('WEBVTT');
   expect(out.vtt).toContain('00:00:04.500 --> 00:00:09.200\nTwo');
 });
+
+test('Copy all gives pure text: every word, no stamps, no headings', async ({ page }) => {
+  const out = await page.evaluate(async () => {
+    const { plainText } = await import('/src/timeline.ts');
+    const stamped = [
+      '[00:05] I need another prompt basically to explain',
+      '[00:12] the system on how to delegate.',
+      '[1:02:03] all of those 744 cases needs to put in some sort',
+    ].join('\n');
+    const untimed = 'just words, no stamps here';
+    return { plain: plainText(stamped), untimed: plainText(untimed) };
+  });
+  expect(out.plain).toBe(
+    'I need another prompt basically to explain\nthe system on how to delegate.\nall of those 744 cases needs to put in some sort',
+  );
+  expect(out.plain).not.toContain('[');
+  // An old transcript saved before Blab timed it copies exactly as it is.
+  expect(out.untimed).toBe('just words, no stamps here');
+});
+
+test('Overlapping transcript writes all land, one at a time', async ({ page }) => {
+  const out = await page.evaluate(async () => {
+    const vault = await import('/src/vault.ts');
+    const root = await navigator.storage.getDirectory();
+    const dir = await root.getDirectoryHandle('race', { create: true });
+    // What a transcription does: a partial save still holding the .part file
+    // while the next save starts. The final text must be the one on disk.
+    const jobs = [
+      vault.writeAtomic(dir, 'transcript.md', 'one'),
+      vault.writeAtomic(dir, 'transcript.md', 'two'),
+      vault.writeAtomic(dir, 'transcript.md', 'three'),
+      vault.writeAtomic(dir, 'transcript.md', 'four'),
+    ];
+    await Promise.all(jobs);
+    const file = await dir.getFileHandle('transcript.md');
+    const text = await (await file.getFile()).text();
+    const names = [];
+    for await (const e of dir.values()) names.push(e.name);
+    return { text, names, errors: [] };
+  }).catch((err) => ({ error: String(err && err.message || err) }));
+  if (out.error) throw new Error('overlapping writes collided: ' + out.error);
+  expect(out.text).toBe('four');
+  expect(out.names).not.toContain('transcript.md.part');
+});

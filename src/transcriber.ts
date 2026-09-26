@@ -22,6 +22,9 @@ export type Progress =
 
 export class ModelMissingError extends Error {}
 
+/** The engine died because the model did not fit the wasm heap. */
+export class OutOfMemoryError extends Error {}
+
 /** Absolute, because paths inside a worker resolve against the worker file. */
 const abs = (path: string) => new URL(path, document.baseURI).href;
 
@@ -35,6 +38,8 @@ export class Transcriber {
   private jobs = 0;
   /** Jobs handed over but not yet finished. Live jobs skip when this is set. */
   private running = 0;
+  /** Live caption windows running right now; a caption needs its worker warm. */
+  private liveJobs = 0;
   /** Jobs run one after another; the model holds state we must not share. */
   private queue: Promise<unknown> = Promise.resolve();
 
@@ -125,6 +130,19 @@ export class Transcriber {
             return onPartial?.(msg.text);
           case 'done':
             worker.removeEventListener('message', listener);
+            // A finished job gives the engine's memory back. The wasm heap
+            // never frees itself while the worker lives: the model and its
+            // arena stay resident, so the next transcription on a tired heap
+            // dies mid-run allocating (seen: Best aborting with a bare number
+            // after a run that only failed at the final save, which the page
+            // treated as a failed job the worker had already survived). The
+            // cost is one model load from disk per transcription, and the
+            // reward is a clean heap every time. A live caption window keeps
+            // its worker; only a finished transcription drops it.
+            if (this.liveJobs === 0) {
+              worker.terminate();
+              this.worker = null;
+            }
             return resolve({
               text: msg.text,
               segments: msg.segments,
@@ -144,7 +162,11 @@ export class Transcriber {
               this.worker = null;
             }
             return reject(
-              msg.modelMissing ? new ModelMissingError(msg.message) : new Error(msg.message),
+              msg.modelMissing
+                ? new ModelMissingError(msg.message)
+                : msg.oom
+                  ? new OutOfMemoryError(msg.message)
+                  : new Error(msg.message),
             );
         }
       };
@@ -171,7 +193,8 @@ export class Transcriber {
   ): Promise<void> {
     const id = 'live-' + String(++this.jobs);
     const worker = this.spawn();
-    return new Promise((resolve) => {
+    this.liveJobs++;
+    return new Promise<void>((resolve) => {
       const listener = (event: MessageEvent<FromWorker>) => {
         const msg = event.data;
         // 'loading' carries no id, so it has to be shed before anything reads
@@ -203,6 +226,8 @@ export class Transcriber {
         at,
       };
       worker.postMessage(job, [audio.buffer]);
+    }).finally(() => {
+      this.liveJobs--;
     });
   }
 
