@@ -37,7 +37,7 @@ async function run<T>(page: import('@playwright/test').Page, body: string): Prom
 }
 
 test('a second job waits for the first to finish', async ({ page }) => {
-  const seen = await run<{ afterBoth: number; afterFirstDone: number }>(
+  const seen = await run<{ queued: boolean; fresh: boolean }>(
     page,
     `
     const t = new Transcriber(() => new FakeWorker());
@@ -46,20 +46,23 @@ test('a second job waits for the first to finish', async ({ page }) => {
     await tick();
     // Before the fix both jobs were already in the worker: sendTranscribe
     // posts synchronously, and it was evaluated as an argument to track().
-    const afterBoth = latest().posted.length;
+    const queued = made.length === 1 && made[0].posted.length === 1;
 
-    latest().deliver(done(latest().posted[0].id, 'one'));
+    made[0].deliver(done(made[0].posted[0].id, 'one'));
     await p1;
     await tick();
-    const afterFirstDone = latest().posted.length;
+    // A finished job drops the worker, so job 2 runs on a fresh one: the wasm
+    // heap never frees itself while the worker lives, and the next job died
+    // mid-run allocating on the tired one.
+    const fresh = made.length === 2 && made[1].posted.length === 1 && made[0].terminated;
 
-    latest().deliver(done(latest().posted[1].id, 'two'));
+    made[1].deliver(done(made[1].posted[0].id, 'two'));
     await p2;
-    return { afterBoth, afterFirstDone };
+    return { queued, fresh };
   `,
   );
-  expect(seen.afterBoth).toBe(1);
-  expect(seen.afterFirstDone).toBe(2);
+  expect(seen.queued).toBe(true);
+  expect(seen.fresh).toBe(true);
 });
 
 test('both callers still get their own transcript', async ({ page }) => {
@@ -73,7 +76,8 @@ test('both callers still get their own transcript', async ({ page }) => {
     latest().deliver(done(latest().posted[0].id, 'the first talk'));
     const first = (await p1).text;
     await tick();
-    latest().deliver(done(latest().posted[1].id, 'the second talk'));
+    // The first job dropped its worker, so the second runs on a fresh one.
+    latest().deliver(done(latest().posted[0].id, 'the second talk'));
     const second = (await p2).text;
     return { first, second };
   `,
@@ -145,4 +149,20 @@ test('a job that fails does not wedge the queue', async ({ page }) => {
   expect(seen.rejected).toBe(true);
   expect(seen.secondRan).toBe(true);
   expect(seen.text).toBe('after the failure');
+});
+
+test('a finished caption does not drop the worker', async ({ page }) => {
+  const seen = await run<{ alive: boolean; stillOneWorker: boolean }>(
+    page,
+    `
+    const t = new Transcriber(() => new FakeWorker());
+    t.live(new Float32Array(8), 'base', 1200, () => {});
+    await tick();
+    latest().deliver({ type: 'live', id: latest().posted[0].id, text: 'half a sentence', at: 1200 });
+    await tick();
+    return { alive: !latest().terminated, stillOneWorker: made.length === 1 };
+  `,
+  );
+  expect(seen.alive).toBe(true);
+  expect(seen.stillOneWorker).toBe(true);
 });

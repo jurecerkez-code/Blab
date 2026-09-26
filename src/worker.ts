@@ -9,6 +9,7 @@ import { type ModelId, modelById } from './models';
 import { fromChunks } from './timeline';
 import { assembleSpeech, mapToRecording, speechWindows } from './vad';
 import { filterTimestampTokens } from './tokens';
+import { engineWords } from './engine-errors';
 
 /**
  * Whisper stays multilingual even though Blab only writes English.
@@ -374,7 +375,10 @@ async function runTranscribe(
     // model that loaded fine and then hit a bad clip is worth keeping; it
     // takes seconds to load and the next recording will want it.
     asrCache.delete(repo);
-    const message = err instanceof Error ? err.message : String(err);
+    // A bare number is what a wasm memory abort looks like from here (seen:
+    // 1283623640, the medium encoder as one float array). engineWords turns
+    // that and its text-shaped cousins into words with a next step.
+    const message = engineWords(err instanceof Error ? err.message : String(err));
     post({
       type: 'failed',
       id,

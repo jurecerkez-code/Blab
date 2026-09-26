@@ -51,7 +51,29 @@ export async function importAudio(
  * a temporary name, then move it over the real one. FileSystemFileHandle.move
  * is a rename on the same volume, so it is atomic in practice.
  */
-export async function writeAtomic(
+// One write at a time. Two overlapping writeAtomic calls collide on the same
+// .part file: Chromium allows one writable stream per file, and the second
+// createWritable throws NoModificationAllowedError. The collision used to
+// land on the final save, so a finished transcription reported failure while
+// its transcript sat complete on disk next to a leftover .part. The chain
+// keeps every write whole and in order; a rejected write must not jam the
+// queue, so the chain itself never carries a rejection.
+let writes: Promise<unknown> = Promise.resolve();
+
+export function writeAtomic(
+  dir: FileSystemDirectoryHandle,
+  name: string,
+  data: Blob | string,
+): Promise<void> {
+  const run = writes.then(() => doWriteAtomic(dir, name, data));
+  writes = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+async function doWriteAtomic(
   dir: FileSystemDirectoryHandle,
   name: string,
   data: Blob | string,
