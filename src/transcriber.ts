@@ -22,6 +22,9 @@ export type Progress =
 
 export class ModelMissingError extends Error {}
 
+/** The engine died because the model did not fit the wasm heap. */
+export class OutOfMemoryError extends Error {}
+
 /** Absolute, because paths inside a worker resolve against the worker file. */
 const abs = (path: string) => new URL(path, document.baseURI).href;
 
@@ -159,7 +162,11 @@ export class Transcriber {
               this.worker = null;
             }
             return reject(
-              msg.modelMissing ? new ModelMissingError(msg.message) : new Error(msg.message),
+              msg.modelMissing
+                ? new ModelMissingError(msg.message)
+                : msg.oom
+                  ? new OutOfMemoryError(msg.message)
+                  : new Error(msg.message),
             );
         }
       };

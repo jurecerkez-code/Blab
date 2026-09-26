@@ -24,7 +24,7 @@ const HARNESS = `
   }
   const tick = async (n = 4) => { for (let i = 0; i < n; i++) await new Promise((r) => setTimeout(r, 0)); };
   const done = (id, text) => ({ type: 'done', id, text, segments: [], degenerate: false, noSpeech: false });
-  const { Transcriber } = await import('/src/transcriber.ts');
+  const { Transcriber, OutOfMemoryError } = await import('/src/transcriber.ts');
   const latest = () => made[made.length - 1];
 `;
 
@@ -165,4 +165,26 @@ test('a finished caption does not drop the worker', async ({ page }) => {
   );
   expect(seen.alive).toBe(true);
   expect(seen.stillOneWorker).toBe(true);
+});
+
+test('an out of memory failure is recognisable, not just text', async ({ page }) => {
+  const seen = await run<{ oom: boolean; plain: boolean }>(
+    page,
+    `
+    const t = new Transcriber(() => new FakeWorker());
+    const p1 = t.transcribe(new Float32Array(8), 'medium', () => {});
+    const p2 = t.transcribe(new Float32Array(8), 'base', () => {});
+    await tick();
+    latest().deliver({ type: 'failed', id: latest().posted[0].id, message: 'Whisper ran out of memory', modelMissing: false, oom: true });
+    let oom = false;
+    try { await p1; } catch (e) { oom = e instanceof OutOfMemoryError; }
+    await tick();
+    latest().deliver({ type: 'failed', id: latest().posted[0].id, message: 'boom', modelMissing: false });
+    let plain = false;
+    try { await p2; } catch (e) { plain = e instanceof Error && !(e instanceof OutOfMemoryError); }
+    return { oom, plain };
+  `,
+  );
+  expect(seen.oom).toBe(true);
+  expect(seen.plain).toBe(true);
 });

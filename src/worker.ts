@@ -9,7 +9,7 @@ import { type ModelId, modelById } from './models';
 import { fromChunks } from './timeline';
 import { assembleSpeech, mapToRecording, speechWindows } from './vad';
 import { filterTimestampTokens } from './tokens';
-import { engineWords } from './engine-errors';
+import { engineOutOfMemory, engineWords } from './engine-errors';
 
 /**
  * Whisper stays multilingual even though Blab only writes English.
@@ -67,7 +67,7 @@ export type FromWorker =
       vadFailed: boolean;
     }
   | { type: 'live'; id: string; text: string | null; at: number }
-  | { type: 'failed'; id: string; message: string; modelMissing: boolean };
+  | { type: 'failed'; id: string; message: string; modelMissing: boolean; oom?: boolean };
 
 const post = (msg: FromWorker) => self.postMessage(msg);
 
@@ -377,13 +377,15 @@ async function runTranscribe(
     asrCache.delete(repo);
     // A bare number is what a wasm memory abort looks like from here (seen:
     // 1283623640, the medium encoder as one float array). engineWords turns
-    // that and its text-shaped cousins into words with a next step.
-    const message = engineWords(err instanceof Error ? err.message : String(err));
+    // that and its text-shaped cousins into words with a next step, and the
+    // oom flag tells the page the truth no matter what the words say.
+    const raw = err instanceof Error ? err.message : String(err);
     post({
       type: 'failed',
       id,
-      message,
-      modelMissing: err instanceof ModelMissing || /not found locally|allowRemoteModels=false/.test(message),
+      message: engineWords(raw),
+      modelMissing: err instanceof ModelMissing || /not found locally|allowRemoteModels=false/.test(raw),
+      oom: engineOutOfMemory(raw),
     });
   }
 }

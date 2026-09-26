@@ -8,7 +8,7 @@ import { NoteClock } from './notes';
 import { Recorder, formatDuration } from './recorder';
 import { forgetRoot, recallRoot, rememberRoot } from './store';
 import { type Line, parse, plainText, render, stamp, toSrt, toVtt } from './timeline';
-import { ModelMissingError, Transcriber } from './transcriber';
+import { ModelMissingError, OutOfMemoryError, Transcriber } from './transcriber';
 import {
   AUDIO,
   NOTES,
@@ -768,7 +768,12 @@ async function stopRecording(): Promise<void> {
   if (saved) await transcribeInto(saved.handle, saved.dir);
 }
 
-async function transcribeInto(dir: FileSystemDirectoryHandle, name: string): Promise<void> {
+async function transcribeInto(
+  dir: FileSystemDirectoryHandle,
+  name: string,
+  model: ModelId = savedModel(),
+  allowFallback = true,
+): Promise<void> {
   try {
     const audioFile = await findAudio(dir);
     if (!audioFile) throw new Error(`No audio in ${name}.`);
@@ -777,7 +782,6 @@ async function transcribeInto(dir: FileSystemDirectoryHandle, name: string): Pro
     say('Reading the audio…');
     const samples = await decodeForWhisper(audio);
 
-    const model = savedModel();
     // The transcript is written as it comes, so a crash mid-run costs nothing
     // more than the last few chunks. The timed version replaces it at the end.
     const result = await transcriber.transcribe(
@@ -839,6 +843,15 @@ async function transcribeInto(dir: FileSystemDirectoryHandle, name: string): Pro
           `then press Transcribe. Your audio and notes are safe in ${name}.`,
         true,
       );
+    } else if (err instanceof OutOfMemoryError && allowFallback && model === 'medium') {
+      // Best is the override pick, and on a 32-bit wasm heap the medium
+      // encoder can die mid-run even on a short talk; whether it fits is
+      // down to allocation luck. The words matter more than the label, so
+      // the same recording runs again on Balanced and the status line has
+      // already said so. No second fallback: if Balanced dies too, that is
+      // an error worth reading.
+      say('Best ran out of memory on this machine. Transcribing on Balanced instead.');
+      await transcribeInto(dir, name, 'small', false);
     } else {
       say(`Could not transcribe (audio and notes are saved): ${(err as Error).message}`, true);
     }

@@ -148,3 +148,28 @@ test('Copy all gives pure text: every word, no stamps, no headings', async ({ pa
   // An old transcript saved before Blab timed it copies exactly as it is.
   expect(out.untimed).toBe('just words, no stamps here');
 });
+
+test('Overlapping transcript writes all land, one at a time', async ({ page }) => {
+  const out = await page.evaluate(async () => {
+    const vault = await import('/src/vault.ts');
+    const root = await navigator.storage.getDirectory();
+    const dir = await root.getDirectoryHandle('race', { create: true });
+    // What a transcription does: a partial save still holding the .part file
+    // while the next save starts. The final text must be the one on disk.
+    const jobs = [
+      vault.writeAtomic(dir, 'transcript.md', 'one'),
+      vault.writeAtomic(dir, 'transcript.md', 'two'),
+      vault.writeAtomic(dir, 'transcript.md', 'three'),
+      vault.writeAtomic(dir, 'transcript.md', 'four'),
+    ];
+    await Promise.all(jobs);
+    const file = await dir.getFileHandle('transcript.md');
+    const text = await (await file.getFile()).text();
+    const names = [];
+    for await (const e of dir.values()) names.push(e.name);
+    return { text, names, errors: [] };
+  }).catch((err) => ({ error: String(err && err.message || err) }));
+  if (out.error) throw new Error('overlapping writes collided: ' + out.error);
+  expect(out.text).toBe('four');
+  expect(out.names).not.toContain('transcript.md.part');
+});
