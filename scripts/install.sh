@@ -4,9 +4,9 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/jurecerkez-code/Blab/main/scripts/install.sh | sh
 #
-# This is one of only two things in the project that touch the network at all —
-# the other is `npm run setup`, which you meet only if you build Blab yourself
-# — and it touches it once. What it installs never does at all.
+# This is one of only two things in the project that touch the network at all.
+# The other is `npm run setup`, which you meet only if you build Blab yourself.
+# This script touches it once. What it installs never does at all.
 set -eu
 
 REPO='jurecerkez-code/Blab'
@@ -98,7 +98,7 @@ WRAPPER
   # The icon is inside the AppImage. The copy at its root is a symlink into
   # usr/share, so pull the real file or you install a broken link. Referencing
   # it by absolute path saves guessing which hicolor size directory it belongs
-  # in — freedesktop allows either, and only one of them can be wrong.
+  # in; freedesktop allows either, and only one of them can be wrong.
   ICON=blab
   (cd "$TMP" && "$APP/Blab.AppImage" --appimage-extract 'usr/share/icons/hicolor/*/apps/blab.png' >/dev/null 2>&1) || true
   FOUND=$(find "$TMP/squashfs-root" -name 'blab.png' -type f 2>/dev/null | head -n 1)

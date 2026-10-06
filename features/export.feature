@@ -1,6 +1,6 @@
 Feature: Handing a recording to someone else
   Copy all covers pasting a recording into an AI or an email. It does not cover
-  the times someone wants a file — an attachment, something to drop in a shared
+  the times someone wants a file: an attachment, something to drop in a shared
   drive, something to keep beside an essay. Two buttons write that file
   wherever you point them, and nothing about the recording's own folder
   changes.

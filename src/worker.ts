@@ -15,7 +15,7 @@ import { engineOutOfMemory, engineWords } from './engine-errors';
  * Whisper stays multilingual even though Blab only writes English.
  *
  * `whisper-base.en` is the obvious swap; same parameter count, same 73 MB,
- * all of it spent on one language; and it was tried. On five sentences put
+ * all of it spent on one language, and it was tried. On five sentences put
  * through both, it tied on three, both got one wrong, and it lost the fifth:
  * "rear delt" came back as "rear dealt" where the multilingual model wrote it
  * correctly. Aggregate benchmarks favour the .en tiers; this vocabulary did
@@ -71,7 +71,7 @@ export type FromWorker =
 
 const post = (msg: FromWorker) => self.postMessage(msg);
 
-/** One pipeline per model; the worker lives as long as the page does. */
+/** One pipeline per model, kept for the life of the worker. */
 const asrCache = new Map<string, Promise<AutomaticSpeechRecognitionPipeline>>();
 
 /** The weights file; the part that is missing when setup has not been run. */
@@ -199,7 +199,7 @@ class PartialStreamer extends TextStreamer {
  * Real Whisper decides this the same way and re-runs the chunk at a higher
  * temperature when it trips. transformers.js implements none of that; there is
  * no compression_ratio_threshold, no logprob_threshold, no temperature fallback
- * anywhere in the bundle; so Blab cannot re-decode. What it can do is notice,
+ * anywhere in the bundle, so Blab cannot re-decode. What it can do is notice,
  * and say so, which is the difference between a file you throw away and a file
  * you do not know to throw away.
  *
@@ -211,7 +211,7 @@ const LOOP_RATIO = 2.4;
 /** Gzip via the platform: no dependency, and the same metric Whisper uses. */
 async function looping(text: string): Promise<boolean> {
   // Short transcripts compress badly for boring reasons; there is no room for
-  // a dictionary to pay for itself; so the ratio means nothing down there.
+  // a dictionary to pay for itself, so the ratio means nothing down there.
   if (text.length < 200) return false;
   try {
     const raw = new TextEncoder().encode(text);
@@ -253,7 +253,7 @@ function settings(streamer: TextStreamer) {
     // the same behaviour said out loud.
     language: 'en' as const,
     // Whisper gets stuck. On a quiet room, or noise that sounds vaguely like
-    // speech, it will latch onto a phrase and repeat it hundreds of times , 
+    // speech, it will latch onto a phrase and repeat it hundreds of times,
     // one recording here lost 434 words in a row to "like a city". Forbidding
     // a repeated run of this many words breaks the loop at the second
     // repetition. Real speech does not repeat six words verbatim back to

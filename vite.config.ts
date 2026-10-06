@@ -10,7 +10,7 @@ const headers = {
 
 /**
  * onnxruntime references its wasm through import.meta.url, so Rollup emits a
- * 21 MB copy into assets/ that nothing ever loads — the worker points
+ * 21 MB copy into assets/ that nothing ever loads; the worker points
  * wasmPaths at the vendored /ort/ copy instead. Drop the duplicate.
  */
 const dropUnusedOrtWasm = {

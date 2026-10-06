@@ -1,5 +1,5 @@
 // The time axis, the note clock and the highlights are all pure functions over
-// text, so they are tested as such — no browser, no microphone, no model. The
+// text, so they are tested as such: no browser, no microphone, no model. The
 // meter spec next door needs a real window because animation cannot be read off
 // a page; none of this does.
 import { expect, test } from '@playwright/test';
@@ -71,7 +71,7 @@ test.describe('what comes back from Whisper', () => {
   // transformers.js builds its plain text as chunks.map(c => c.text).join(''),
   // so the chunks ARE the transcript. Anything dropped here is speech the user
   // said and will never see. Every case below is a shape the library really
-  // produces — new_chunk() starts every chunk as {timestamp: [null, null]} and
+  // produces: new_chunk() starts every chunk as {timestamp: [null, null]} and
   // only fills them in when Whisper closes the pair.
 
   test('a chunk with no closing timestamp keeps its words', () => {
@@ -262,7 +262,7 @@ test.describe('the note clock', () => {
 test.describe('highlights', () => {
   // A meeting the length Whisper cuts one into: short phrases, two subjects
   // running through it, and the usual amount of nothing in between. Scored at
-  // the scale it runs at — a handful of tidy sentences would prove nothing,
+  // the scale it runs at: a handful of tidy sentences would prove nothing,
   // because separating the subject of a talk from its filler is exactly the
   // thing that needs enough lines to be visible.
   const talk = [
@@ -346,7 +346,7 @@ test.describe('highlights', () => {
 
   test('a stuck Whisper loop is one highlight at most', () => {
     // The failure this app has already seen: one phrase, hundreds of times.
-    // The loop is on the talk's own words, which is the hard case — it is the
+    // The loop is on the talk's own words, which is the hard case: it is the
     // top-scoring line in the recording and it is there twenty times.
     const stuck = [...talk];
     for (let i = 0; i < 20; i++) {

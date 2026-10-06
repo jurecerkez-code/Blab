@@ -6,7 +6,7 @@ Feature: The lines worth going back to
   the transcripts that are already hardest to trust.
 
   Two things decide it. What the talk keeps returning to, and where you were
-  typing — a note written at fourteen minutes says the speaker was worth
+  typing: a note written at fourteen minutes says the speaker was worth
   writing down at fourteen minutes, and no statistic beats someone who was in
   the room.
 

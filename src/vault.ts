@@ -176,7 +176,7 @@ export async function looksLikeGitCheckout(root: FileSystemDirectoryHandle): Pro
  *
  * Two checks, because neither covers the other. `looksLikeGitCheckout` reads
  * the folder itself and works everywhere, including the browser build, but a
- * directory handle cannot reach its parent; so it only ever catches the top of
+ * directory handle cannot reach its parent, so it only ever catches the top of
  * a checkout, and misses a notes folder three levels inside one. The desktop
  * app can do better: the shell saw where this folder is when access to it was
  * granted, and can climb from there. Where there is no shell to ask, the first

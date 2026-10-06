@@ -36,7 +36,7 @@ export async function decodeForWhisper(audio: Blob): Promise<Float32Array> {
     // Anything past roughly ninety minutes lands here. decodeAudioData has to
     // hold the entire file at Opus's native 48 kHz before it can resample it
     // down, and past about a gigabyte Chromium refuses the allocation and
-    // reports it as "Unable to decode audio data"; the same message a corrupt
+    // reports it as "Unable to decode audio data", the same message a corrupt
     // file gives, which is why this looked like a broken recording rather than
     // a long one. Decoding packet by packet never needs that allocation.
     const streamed = await decodeInBlocks(bytes).catch(() => null);
@@ -144,7 +144,7 @@ async function decodeInBlocks(bytes: ArrayBuffer): Promise<Float32Array | null> 
   // cannot run while this loop holds the thread. The loop only ever yielded
   // inside `if (pendingFrames >= a sample count)`, so the counter was still zero
   // every time it was read, the condition was never true, and every packet in
-  // the recording was queued before a single one was drained — the whole thing
+  // the recording was queued before a single one was drained, the whole thing
   // buffered at 48 kHz, which is the exact allocation this path exists to
   // avoid. `if (failure) break` was unreachable for the same reason.
   //
@@ -334,7 +334,7 @@ function readOpusTrack(data: Uint8Array): OpusTrack | null {
           // Each field above belongs to the entry it sits inside, so they are
           // read into a scratch and kept only if this entry turns out to be the
           // Opus one. Held flat, as they were, a second track would silently
-          // overwrite the first; and then its blocks would be fed to an Opus
+          // overwrite the first, and then its blocks would be fed to an Opus
           // decoder as if they were sound.
           const outer = entry;
           entry = blank();

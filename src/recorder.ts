@@ -1,5 +1,5 @@
 // Thin wrapper over MediaRecorder. Holds the mic open for one recording only,
-// and; when asked; a second capture of whatever the computer is playing so
+// and, when asked, a second capture of whatever the computer is playing so
 // the other side of a call is in the file too.
 const MIME_CANDIDATES = ['audio/webm;codecs=opus', 'audio/webm'];
 
@@ -52,7 +52,7 @@ class LevelProbe {
    *
    * One probe is kept for the life of the Recorder and `peak` only ever
    * ratchets upward, so without this a second recording inherits the first
-   * one's peak — and the "No computer audio was heard" notice is suppressed on
+   * one's peak, and the "No computer audio was heard" notice is suppressed on
    * exactly the recording where it is true. detach() is not the place for it:
    * the peak has to survive until stop() has read it.
    */
@@ -106,7 +106,7 @@ export class Recorder {
       //
       // Noise suppression is the one that hurts. It works by gating short
       // broadband transients, and the release of a /d/ or a /t/ *is* a short
-      // broadband transient; so it files the front off consonants. "Rear delt"
+      // broadband transient, so it files the front off consonants. "Rear delt"
       // came back as "rear aelt" here, and Whisper only invents a non-word when
       // the sound it was given has genuinely lost something.
       //

@@ -1,7 +1,7 @@
 // features/installer-contents.feature, executed.
 //
-// These run in Node rather than the browser — a Playwright spec body always
-// does — so the plan is imported straight from scripts/. It is a pure function
+// These run in Node rather than the browser. A Playwright spec body always
+// does, so the plan is imported straight from scripts/. It is a pure function
 // on purpose: the rules below are the ones that shipped broken twice, and they
 // could not be tested while they lived inside a script that downloads a
 // gigabyte on import.
@@ -73,7 +73,7 @@ test.describe('what setup keeps', () => {
 
   test('the detector is never collateral', () => {
     // Not a Whisper model, never what the argument is about, and both prunes
-    // used to take it — silence detection went with it.
+    // used to take it; silence detection went with it.
     for (const argv of [['all'], ['clean']]) {
       const { keep } = plan(argv);
       expect(afterPrune([...EVERY_MODEL, VAD_REPO], keep)).toContain(VAD_REPO);

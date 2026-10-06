@@ -233,7 +233,7 @@ for (const name of toFetch) {
 // The prune exists so that swapping models does not leave dead weights in
 // public/models for electron-builder to bake into the installer. It takes the
 // list of what to KEEP, which the plan works out and tests/setup.spec.ts pins
-// down — a null keep-list means the models accumulate and nothing is removed.
+// down; a null keep-list means the models accumulate and nothing is removed.
 if (keep) await dropOtherModels(keep);
 
 const modelTotal = total === 0 ? 'model files already present' : mb(total);

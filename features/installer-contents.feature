@@ -2,7 +2,7 @@ Feature: The installer contains the models it offers
   Blab ships its speech models inside the installer. That is the whole basis of
   the promise on the front of the README: install it once and it never touches
   the network again. It also means the build has exactly one chance to get the
-  contents right, and no way to notice later — an installer with no weights in
+  contents right, and no way to notice later: an installer with no weights in
   it is the same shape and very nearly the same name as one that works.
 
   `npm run setup` is what puts them there. It takes the name of a model, or

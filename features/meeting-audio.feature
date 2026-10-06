@@ -15,7 +15,7 @@ Feature: Recording an online meeting
   works on the next tool as well as this one, and why it keeps the promise the
   rest of the app makes: nothing leaves the machine.
 
-  Two things it honestly cannot do. It cannot say who spoke — Whisper writes
+  Two things it honestly cannot do. It cannot say who spoke: Whisper writes
   words, not names, so a meeting transcript is one run of speech with no labels
   on it. And it can only record system audio on Windows: Electron captures it
   through a loopback device and has one there and nowhere else, and going around

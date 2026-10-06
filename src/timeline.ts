@@ -2,7 +2,7 @@
 //
 // Both files store it the same way: a `[mm:ss]` prefix at the start of a line,
 // counted from the beginning of the recording. Plain text, still greppable,
-// still readable in any editor; which is the whole point of the folder.
+// still readable in any editor, which is the whole point of the folder.
 //
 // The two axes line up because a pause writes nothing. Recorded time and
 // position in audio.webm are the same number, so a note typed at 14 minutes
@@ -114,7 +114,7 @@ export function toVtt(lines: Line[]): string {
 }
 
 /**
- * A stamped block back into lines, or null when nothing in it is stamped , 
+ * A stamped block back into lines, or null when nothing in it is stamped,
  * which is every recording made before this existed. Callers use the null to
  * fall back to showing the text as it is rather than inventing times for it.
  *

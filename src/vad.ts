@@ -5,7 +5,7 @@
 // onnx-community export has no config.json, so transformers.js refuses it.
 // The raw ONNX is small (640 KB) and speaks a fixed protocol; one 512-sample
 // frame in, one speech probability out, plus the state tensors that carry
-// over to the next frame; so driving it directly is less code than working
+// over to the next frame, so driving it directly is less code than working
 // around the wrapper, and it runs inside the same worker with the same
 // vendored wasm.
 //
@@ -77,7 +77,7 @@ async function vadSession(weights: string, ortPath: string): Promise<ort.Inferen
  *
  * None of which was detected. The old code hunted for inputs literally named
  * h and c, found neither, and threw "Unexpected silero ONNX inputs" before a
- * single frame ever ran — which, with the size gate in the worker, is why
+ * single frame ever ran, which, with the size gate in the worker, is why
  * voice-activity detection never worked in a shipped build. Reading the names
  * and counting the state tensors covers both without this code needing to
  * know which version it was handed.

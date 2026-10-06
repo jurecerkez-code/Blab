@@ -61,7 +61,7 @@ export class Transcriber {
    *
    * It takes a function rather than a promise, and that is the whole point.
    * `track(this.send(...))` evaluates the send first, and the send posts to the
-   * worker synchronously inside its Promise executor — so the job reached the
+   * worker synchronously inside its Promise executor, so the job reached the
    * worker before anything was chained, and the chain only sequenced when each
    * caller heard back. Two recordings finishing close together ran two
    * generations at once against one cached pipeline, which holds decoder state
