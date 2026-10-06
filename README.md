@@ -8,65 +8,104 @@ your machine.
 
 Windows, Mac and Linux. Free. Open source. Offline.
 
-## Download
+![Blab, with a recording open](assets/app.png)
 
-Everything is on the [releases page](https://github.com/jurecerkez-code/Blab/releases/latest).
+## Get it
 
-| Your computer | File | What to do |
-|---------------|------|------------|
-| **Windows** | `Blab-Setup-*.exe` | Run it. One warning screen. Click More info, Run anyway. |
-| **Mac** | `Blab-*.dmg` | Open it, drag Blab into Applications. One warning screen. See below. |
-| **Linux** | `Blab-*.AppImage` | `chmod +x Blab-*.AppImage && ./Blab-*.AppImage --no-sandbox` |
+### The easy way
 
-One Mac file works on every Mac, old or new. The Linux file installs nothing.
+1. Open the [releases page](https://github.com/jurecerkez-code/Blab/releases/latest).
+2. Under Assets, download the file for your computer:
 
-**Mac warning screen:** Done, then System Settings, Privacy & Security, scroll
-down, Open Anyway. **Why the warning exists:** Blab is unsigned, because
-signing costs 99 dollars a year and Blab is free. This is the price.
+| Your computer | The file to download |
+|---------------|----------------------|
+| Windows | `Blab-Setup-*.exe` |
+| Mac | `Blab-*.dmg` |
+| Linux | `Blab-*.AppImage` |
 
-**Linux:** AppImages on Ubuntu 22 and older need `sudo apt install libfuse2`.
-The `--no-sandbox` flag is a Chromium thing, not a Blab bug.
+The `*` is the version number. Everything on that page is the newest
+version, so just take the one for your computer. One Mac file works on every
+Mac, old or new. The Linux file installs nothing.
 
-### Or one command
+The download is big, about 758 MB, because all three speech models are
+inside it. That is the whole point: nothing to download later, works offline
+forever, even if this repository disappears tomorrow.
 
-Same command on all three systems, only the shell differs.
+3. Run it:
+   - **Windows:** double-click the file. Windows shows "Windows protected
+     your PC". Click **More info**, then **Run anyway**. That screen is there
+     because Blab is not signed (a certificate costs 99 dollars a year) and
+     Blab is free. It installs for you alone and asks for no administrator
+     password.
+   - **Mac:** open the dmg and drag Blab into Applications. The first time
+     you open it, macOS says it cannot verify the app. Go to System Settings,
+     Privacy & Security, scroll down, click **Open Anyway**. Same reason:
+     unsigned, free.
+   - **Linux:** `chmod +x Blab-*.AppImage && ./Blab-*.AppImage --no-sandbox`.
+     On Ubuntu 22 and older, run `sudo apt install libfuse2` first. The
+     `--no-sandbox` flag is a Chromium thing, not a Blab bug.
+
+4. Open Blab. Pick a folder. Type a title. Press Record.
+
+That is the whole setup.
+
+### The one-command way
+
+If you live in a terminal, one line downloads the right file and installs
+it. Never opened a terminal? It is the black window app: on Windows, press
+Start and type PowerShell; on Mac, press Cmd+Space and type Terminal. Paste
+one of these and press Enter:
 
 **Mac and Linux**
-
 ```
 curl -fsSL https://raw.githubusercontent.com/jurecerkez-code/Blab/main/scripts/install.sh | sh
 ```
 
-**Windows**, in PowerShell
-
+**Windows (PowerShell)**
 ```
 irm https://raw.githubusercontent.com/jurecerkez-code/Blab/main/scripts/install.ps1 | iex
 ```
 
-Neither asks for an administrator password. Both scripts are short, read them
-before you run them.
+Neither asks for an administrator password, both scripts are short, and you
+can read them before you run them. They download the installer once; the app
+itself never touches the network again.
 
 ## How it works
 
 1. Open Blab. Pick a folder. This is the only choice you ever make.
 2. Type a title. Press Record.
 3. Type your notes while the talk runs.
-4. Press Stop. The transcript appears next to your notes.
+4. Press Stop. The transcript appears next to your notes. Click a line and
+   the audio plays from that moment.
 
-Every recording is three plain files in the folder you picked:
-`audio.webm`, `notes.md`, `transcript.md`. No database. Open them in any
-editor, move them anywhere.
+Every recording is three plain files in the folder you picked: `audio.webm`,
+`notes.md`, `transcript.md`. No database. Open them in any editor, move them
+anywhere, keep them forever.
 
-The notes and the transcript both carry times. Click a line, the audio plays
-from that moment.
+The first time it starts, Blab picks the speech model for your machine (Best
+on Apple Silicon, Balanced on a modern laptop, Fast on an old one). You can
+change it in the picker. That is all the configuration there is.
 
-Three speech models (Fast, Balanced, Best) are inside the installer. Blab
-picks one for your machine on first launch: Best on Apple Silicon, Balanced
-on a modern laptop, Fast on an old one. You can change it in the app. That is
-all the configuration there is.
+Also in there, once you need it:
 
-Done installing means done. Nothing to download later, works offline forever,
-even if this repository disappears tomorrow.
+- Live captions while recording, so a mic problem is visible before the talk
+  ends.
+- Record the computer's audio too, for meetings (Windows only, mixed into
+  the same file).
+- Import an existing audio file and get the same transcript treatment.
+- Export subtitles (`.srt`, `.vtt`), or copy one clean text block for
+  pasting into anything.
+- "Worth going back to": the lines the talk kept returning to, and the ones
+  you wrote notes near, picked out of your own words with nothing invented.
+
+## If something goes wrong
+
+| What you see | What it means |
+|--------------|---------------|
+| The bars stay flat while you talk | Blab cannot hear you. Wrong microphone, muted, unplugged. Fix it before the talk, not after. |
+| The transcript repeats one phrase forever | Whisper got stuck, because the microphone was too far away. Record again with the mic closer. |
+| Blab says the transcript looks like a loop | Same thing, said out loud instead of hidden. That is the feature. |
+| The window must stay open while it transcribes | There is no tray icon. Closing the window stops the job. The audio and notes are already saved. |
 
 ## What it does not do
 
@@ -78,20 +117,34 @@ even if this repository disappears tomorrow.
 - No auto-update. Download once, it works forever.
 - No telemetry. No analytics. No "AI companion".
 
-## If your recording goes wrong
+## How it is built
 
-| What you see | What it means |
-|--------------|---------------|
-| The bars stay flat while you talk | Blab cannot hear you. Wrong microphone, muted, unplugged. Fix it now, not after the talk. |
-| The transcript repeats one phrase forever | Whisper got stuck, because the microphone was too far away. Say it with the mic closer. |
-| Saved, but Blab says the transcript looks like a loop | Same thing. It says so instead of pretending. That is the feature. |
+For people who like machinery. Blab works fine if you skip this.
 
-## Why the download is big
+- **Whisper runs in the app.** No server, no API.
+  `@huggingface/transformers` runs quantized Whisper in a web worker on
+  WebAssembly threads. It is the only runtime dependency; everything else is
+  the platform (Electron, the File System Access API, Web Audio).
+- **Silence is skipped before transcription.** A Silero voice-activity
+  detector, driven directly against the app's own copy of onnxruntime, cuts
+  silence out before Whisper sees it. Fewer loops, faster runs, and every
+  timestamp maps back to the original recording.
+- **98 tests, no model needed.** The suite drives the real modules in a
+  browser (decode, VAD windows, the job queue, atomic file writes, the
+  exports), and CI runs it plus the typecheck on every pull request.
+- **One config, three platforms.** Pushing a tag builds the Windows
+  installer, one universal Mac dmg (Intel + Apple Silicon) and the Linux
+  AppImage on GitHub runners, and leaves them on a draft release for review.
+- **Rejected, with reasons.** Beam search: the bundled engine has none, the
+  flag does nothing (verified against its source). WebGPU: it needs fp32
+  weights that triple the download, for no gain at these sizes. Both were
+  measured, and the reasons live in the code so nobody asks twice.
+- **Small on purpose.** About 4,300 lines of source in `src/`, no native
+  dependencies.
 
-All three speech models are inside the installer (about 758 MB). That is
-what makes "nothing to download later" true.
+![How Blab works](assets/architecture.svg)
 
-## Build it yourself
+### Build it yourself
 
 ```
 git clone https://github.com/jurecerkez-code/Blab.git
@@ -100,19 +153,9 @@ npm install
 npm run setup        # downloads the models once, needs internet
 npm run dev          # the app in a browser tab
 npm run app          # the desktop app
-npm run app:check    # mic, model and worker, all four lines must say ok
+npm run app:check    # mic, model and worker; all four lines must say ok
 npm run package      # installer for your OS
 ```
-
-## Rejected, with reasons
-
-Two suggestions keep coming up. Both were measured and turned down, and the
-reasons are written into the code so nobody asks twice.
-
-- **Beam search.** The bundled Whisper engine has no beam search at all.
-  Verified against its source. The flag does nothing.
-- **WebGPU.** It needs fp32 weights, which triple the download, for no gain
-  at the sizes Blab ships.
 
 ## Licence
 
