@@ -17,7 +17,7 @@ export async function findAudio(
     if (entry.kind !== 'file') continue;
     if (!entry.name.startsWith('audio.')) continue;
     const ext = entry.name.slice('audio.'.length).toLowerCase();
-    if (ext === 'webm' || AUDIO_SUFFIXES.includes(ext)) {
+    if (AUDIO_SUFFIXES.includes(ext)) {
       return { name: entry.name, handle: entry as FileSystemFileHandle };
     }
   }
