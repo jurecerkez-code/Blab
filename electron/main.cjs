@@ -102,7 +102,7 @@ function serveDist() {
 const ALLOWED = new Set(['media', 'audioCapture', 'fileSystem', 'clipboard-sanitized-write', 'clipboard-read']);
 
 // Saying yes above only answers Chromium. macOS keeps its own record, and if it
-// has never been asked it hands back a stream of silence rather than an error , 
+// has never been asked it hands back a stream of silence rather than an error,
 // so the recording succeeds, the file is the right shape, and every word in it
 // is gone. Nothing throws, so the renderer has nothing to report. Ask the
 // system directly and let the caller say something useful when the answer is no.
@@ -126,7 +126,7 @@ async function askMacForMicrophone() {
   if (process.platform !== 'darwin') return true;
   if (micStatus() === 'granted') return true;
   // Ask whatever the status says. Asking when the answer really is no just
-  // returns false and shows nothing, so there is no cost to trying; and the
+  // returns false and shows nothing, so there is no cost to trying, and the
   // status alone has proved not to be worth trusting as a reason to skip it.
   return systemPreferences.askForMediaAccess('microphone');
 }
@@ -176,7 +176,7 @@ function serveRecordingState() {
  * Where the File System Access API last granted a folder, as a real path.
  *
  * Recordings are made on a laptop and stay on it. The one way they have ever
- * escaped that is a folder inside a git checkout, so Blab refuses those; and
+ * escaped that is a folder inside a git checkout, so Blab refuses those, and
  * refusing them means knowing where a folder is, which the page cannot work out
  * for itself. A directory handle has no path and no way to reach its parent, so
  * the check in vault.ts can only look inside the folder it was given: it
@@ -189,7 +189,7 @@ function serveRecordingState() {
  *
  * The permission handlers are the way through. Chromium routes every grant of a
  * folder past them with the path attached, which is the one moment the two
- * halves of that folder; the handle the page holds and the location on disk , 
+ * halves of that folder, the handle the page holds and the location on disk,
  * are both in view. It costs nothing: those handlers already run.
  */
 let granted = null;
@@ -283,7 +283,7 @@ function allowLocalPermissions() {
   // not choosing a capture target in the middle of a call.
   //
   // 'loopback' is the only system-audio value Electron takes, and it works on
-  // Windows alone — its own typing says so: "Specifying a loopback device will
+  // Windows alone. Its own typing says so: "Specifying a loopback device will
   // capture system audio, and is currently only supported on Windows." This
   // used to pass 'systemsound' on macOS, which is not a value Electron accepts
   // at all, so a Mac recorded the microphone while the checkbox said otherwise
@@ -357,7 +357,7 @@ function createWindow() {
   // that preventing it also prevents the menu shortcut, which an ordinary
   // keydown listener in the page could not do. Asking rather than silently
   // swallowing the key, because a keystroke that does nothing at all is its
-  // own kind of broken; and the question explains what nearly happened.
+  // own kind of broken, and the question explains what nearly happened.
   win.webContents.on('before-input-event', (event, input) => {
     if (!recording || input.type !== 'keyDown') return;
     const key = (input.key || '').toLowerCase();
@@ -374,7 +374,7 @@ function createWindow() {
 
   // On a Mac this is the one that matters. Cmd+W closes the window without
   // quitting, which makes it the reflex for getting something out of the way
-  // rather than for being finished with it; and on a recording it costs the
+  // rather than for being finished with it, and on a recording it costs the
   // talk. Windows and Linux have no equivalent habit, but they lose the same
   // audio, so the question is asked everywhere.
   win.on('close', (event) => {
@@ -462,7 +462,7 @@ async function diagnose(win) {
     } catch (e) { out.model = 'FAILED: ' + e.message; }
 
     // Two seconds of silence through the real worker. Slow, but it exercises
-    // the content security policy, the wasm threads and the weights at once , 
+    // the content security policy, the wasm threads and the weights at once,
     // the three things that break quietly.
     const workerFile = ${JSON.stringify(workerFile ?? null)};
     if (!workerFile) {
@@ -557,7 +557,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   // Everywhere but macOS, closing the last window means you are done. macOS
-  // keeps an app in the dock instead, and reopens a window on activate; which
+  // keeps an app in the dock instead, and reopens a window on activate, which
   // is what the handler above is for. Quitting here would make it dead code.
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();

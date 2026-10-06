@@ -25,7 +25,7 @@ function tx<T>(mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRequest<
         const req = run(db.transaction(STORE, mode).objectStore(STORE));
         // Every call opens its own connection, so every call has to give it
         // back. close() does not cut the transaction short; it marks the
-        // connection to shut once the transaction finishes; so it is safe to
+        // connection to shut once the transaction finishes, so it is safe to
         // ask for here rather than tracking the transaction separately.
         req.onsuccess = () => {
           db.close();

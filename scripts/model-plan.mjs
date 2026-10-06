@@ -2,8 +2,8 @@
 // disk afterwards.
 //
 // This is a separate file for one reason: the decision it makes is the one
-// that broke the 0.7.x releases, and while it lived inside setup.mjs — a
-// script that downloads a gigabyte the moment it is imported — nothing could
+// that broke the 0.7.x releases, and while it lived inside setup.mjs (a
+// script that downloads a gigabyte the moment it is imported), nothing could
 // test it. `all` asked the prune to keep an empty list, which is not "keep
 // everything" but "keep nothing", so a build fetched every model and deleted
 // every model, and the installer went out with no weights in it. Pure in, pure
@@ -27,8 +27,8 @@ export const MODEL_NAMES = Object.keys(MODELS);
 /**
  * Reads the command line and returns the plan.
  *
- * - `toFetch` — model names to download, in catalog order.
- * - `keep` — repository paths the prune may keep, or null to prune nothing.
+ * - `toFetch`: model names to download, in catalog order.
+ * - `keep`: repository paths the prune may keep, or null to prune nothing.
  *
  * `keep` is null for a single named model because models accumulate on
  * purpose: which one the app loads is a runtime choice, so setup holds on to
@@ -42,7 +42,7 @@ export function plan(argv = []) {
 
   // Everything: fetch the catalog, and keep exactly the catalog. Anything else
   // under public/models is a model from an older version of this file, which
-  // is what the prune is for — electron-builder copies that folder wholesale,
+  // is what the prune is for: electron-builder copies that folder wholesale,
   // so a forgotten model is pure installer weight.
   if (want === 'all') {
     return { toFetch: [...MODEL_NAMES], keep: [...MODEL_NAMES.map((n) => MODELS[n]), VAD_REPO] };
@@ -56,7 +56,7 @@ export function plan(argv = []) {
 
   // No argument is the documented default. It has to be tested before the
   // search below, because ''.includes('base') is false and an empty argv used
-  // to fall past every branch into the throw — which is what killed every
+  // to fall past every branch into the throw, which is what killed every
   // release build from 0.7.0 on, the workflow running a bare `npm run setup`.
   if (!want) return { toFetch: [DEFAULT_MODEL], keep: null };
 

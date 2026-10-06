@@ -8,7 +8,7 @@ Feature: Recordings live on one laptop
   writes each recording into whichever folder was picked, so picking a git
   checkout leaves the audio sitting in a working tree, one `git add -A` from
   being pushed to a repository other people can read. So those folders are
-  refused. Not ignored, not warned about — refused. A .gitignore line is the
+  refused. Not ignored, not warned about: refused. A .gitignore line is the
   wrong answer twice over: it protects only the one checkout somebody thought to
   edit, and it makes a private recording's safety the maintainer's job.
 

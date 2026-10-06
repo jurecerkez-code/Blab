@@ -1,6 +1,6 @@
 // Renders build/icon.ico from an inline SVG. Run once; the file is committed
 // by whoever runs it. Windows needs a real .ico, and a 256px PNG inside an ICO
-// container is the whole format — hence the 22 bytes of header below.
+// container is the whole format, hence the 22 bytes of header below.
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,7 +20,7 @@ async function main() {
   try {
     sharp = (await import('sharp')).default;
   } catch {
-    console.error('sharp is not installed — skipping the icon. The app will use the default one.');
+    console.error('sharp is not installed, skipping the icon. The app will use the default one.');
     return;
   }
 

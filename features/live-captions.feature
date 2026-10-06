@@ -1,6 +1,6 @@
 Feature: Hearing the talk while it is still happening
   The transcript is written at Stop, from the whole file. Before that, Blab
-  shows what the microphone is saying as short previews under the meter — so a
+  shows what the microphone is saying as short previews under the meter, so a
   talk that will not transcribe (noise, a mic that is too far) is obvious
   while it can still be fixed.
 

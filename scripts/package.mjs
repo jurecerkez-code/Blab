@@ -31,7 +31,7 @@ const TARGETS = {
   darwin: { flag: ['--mac'], artifact: /^Blab-.*\.dmg$/ },
   win32: { flag: ['--win', 'nsis'], artifact: /^Blab-Setup-.*\.exe$/ },
   // One file that runs on any distribution, with nothing to install and no
-  // package manager to argue with — the closest Linux has to what the dmg and
+  // package manager to argue with, the closest Linux has to what the dmg and
   // the exe already are.
   linux: { flag: ['--linux', 'AppImage'], artifact: /^Blab-.*\.AppImage$/ },
 };
@@ -49,7 +49,7 @@ function run() {
     //
     // Left to itself electron-builder disagrees: on any commit that carries a
     // git tag it decides the build must be a release, goes looking for a GitHub
-    // token, and fails the whole run when there is none — after both installers
+    // token, and fails the whole run when there is none, after both installers
     // have already been written. Which is a strange way to lose a build that
     // worked, and stranger still on a laptop that was never going to publish
     // anything.
@@ -75,7 +75,7 @@ try {
       await copyFile(path.join(out, name), to);
     });
     const { size } = await stat(to);
-    console.log(`\n${name} is in the Blab folder — ${Math.round(size / 1e6)} MB. Double-click it.\n`);
+    console.log(`\n${name} is in the Blab folder, ${Math.round(size / 1e6)} MB. Double-click it.\n`);
   }
 } finally {
   await rm(out, { recursive: true, force: true }).catch(() => {});

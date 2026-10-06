@@ -152,7 +152,7 @@ export class LiveCaptions {
     // From the window that was actually taken, not from WINDOW_MS. The ring
     // starts empty and is emptied again on every pause, and the guard above
     // only requires two seconds, so the first caption after a resume covers
-    // two seconds while WINDOW_MS claims fifteen — stamping it thirteen
+    // two seconds while WINDOW_MS claims fifteen, stamping it thirteen
     // seconds before it was said.
     const windowMs = Math.round((window.length * 1000) / this.sampleRate);
     const at = Math.max(0, now - windowMs);
@@ -178,7 +178,7 @@ export class LiveCaptions {
  * The most recent samples, in a buffer that never moves.
  *
  * The ring lives at the microphone rate (usually 48 kHz), so the cap is 45 s
- * at 2.16 M samples — comfortably over the 15 s caption window.
+ * at 2.16 M samples, comfortably over the 15 s caption window.
  *
  * This used to reallocate and copy the whole thing on every audio callback.
  * At the cap that is 8.6 MB copied about twelve times a second, on the main

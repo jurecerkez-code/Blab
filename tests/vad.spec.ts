@@ -3,7 +3,7 @@
 // This is the bug that cost the app its silence detection for six releases,
 // and it is one function call wide. The old code looked for inputs literally
 // named h and c; the model that actually ships names them input/state/sr and
-// returns output/stateN, so detection threw before a frame ever ran — and the
+// returns output/stateN, so detection threw before a frame ever ran, and the
 // worker swallowed it. Names in, plan out, no model required.
 import { expect, test } from '@playwright/test';
 import { assembleSpeech, sileroPlan, windowsFromProbs } from '../src/vad';

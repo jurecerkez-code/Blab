@@ -43,7 +43,7 @@ const NOTED = 2;
 const SAME = 0.5;
 /**
  * Below this there is nothing to pick from and the honest answer is nothing.
- * Whisper's phrases run five to ten seconds, so this is about two minutes , 
+ * Whisper's phrases run five to ten seconds, so this is about two minutes,
  * a recording you would simply read.
  */
 const MIN_LINES = 12;

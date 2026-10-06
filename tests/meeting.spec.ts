@@ -1,9 +1,9 @@
-// features/meeting-audio.feature, the platform half — executed.
+// features/meeting-audio.feature, the platform half, executed.
 //
 // Everything else in Blab behaves the same on every machine. This one control
 // does not: Electron records the computer's own audio through a loopback
 // device and has one on Windows alone. The app offered it everywhere anyway,
-// and on a Mac passed 'systemsound', which is not a value Electron takes — so
+// and on a Mac passed 'systemsound', which is not a value Electron takes, so
 // the checkbox said one thing and the recording was another, and the only hint
 // came after Stop. The feature file had said "Windows only" the whole time.
 import { expect, test } from '@playwright/test';

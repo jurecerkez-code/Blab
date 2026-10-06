@@ -6,8 +6,8 @@ Feature: One transcription at a time
   sharing one set of buffers.
 
   Overlapping jobs are not a corner case here. The README offers them as a
-  feature — "it runs in the background, so you can start recording the next
-  talk while the last one is still going" — so the second Record press is an
+  feature, "it runs in the background, so you can start recording the next
+  talk while the last one is still going", so the second Record press is an
   ordinary thing to do, and the queue is what makes it safe.
 
   The queue read as though it did this. It did not. `track(this.send(...))`

@@ -492,7 +492,7 @@ function exportButton(
 
 /**
  * One clean text block: everything about the recording, in order, ready to
- * paste into an AI or hand to someone. The full transcript is always in it , 
+ * paste into an AI or hand to someone. The full transcript is always in it,
  * the highlights sit above it rather than in place of it, because they are a
  * way in, not a replacement.
  */
@@ -800,7 +800,7 @@ async function transcribeInto(
       },
     );
 
-    // Not fatal — the transcript is complete either way — but silence
+    // Not fatal: the transcript is complete either way, but silence
     // skipping is a headline of this app and it failing quietly is how it
     // came to be broken in every build from 0.7.0 on without anyone noticing.
     if (result.vadFailed) {
@@ -915,7 +915,7 @@ async function boot(): Promise<void> {
   ui.meeting.checked = savedSystemCapture();
   // Electron records the computer's own audio through a loopback device, and
   // it has one on Windows only. Everywhere else the checkbox could be ticked
-  // and the recording would still be the microphone alone — which is a thing
+  // and the recording would still be the microphone alone, which is a thing
   // to learn before a meeting rather than at the end of one. So it is turned
   // off and says why, in the tooltip and on the label.
   if (window.blab && !window.blab.device?.systemAudio) {
@@ -925,7 +925,7 @@ async function boot(): Promise<void> {
     if (label) {
       label.title = 'Recording the computer’s own audio needs a loopback device, which only Windows has.';
       label.classList.add('unavailable');
-      label.append(' — Windows only');
+      label.append(' (Windows only)');
     }
   }
   // First launch only: remember the machine's sensible default so the user
@@ -943,7 +943,7 @@ async function boot(): Promise<void> {
     if (status === 'ok') return;
     if (status === 'in-repo') {
       // Remembered from a version that allowed it. It will be refused every
-      // time from here, so it is dropped rather than offered again; and the
+      // time from here, so it is dropped rather than offered again, and the
       // message connect() left on screen says why.
       await forgetRoot();
     } else {

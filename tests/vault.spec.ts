@@ -3,7 +3,7 @@
 // These need real directory handles, which rules out the pure-function style of
 // timeline.spec.ts next door: what is being tested is a decision made about a
 // folder on disk. Origin-private storage hands out Chromium's own
-// FileSystemDirectoryHandle — the same type the folder picker returns — so the
+// FileSystemDirectoryHandle, the same type the folder picker returns, so the
 // vault can be driven for real without a picker and without touching anybody's
 // files.
 import { expect, test } from '@playwright/test';
@@ -63,7 +63,7 @@ test('A folder deep inside a checkout is refused too', async ({ page }) => {
     page,
     `const notes = await root.getDirectoryHandle('notes', { create: true });
      // Standing in for the desktop shell, the only thing that can see where a
-     // folder is. There is no .git in this folder — only above it.
+     // folder is. There is no .git in this folder, only above it.
      let askedAbout = null;
      window.blab = {
        gitRoot: (n) => { askedAbout = n; return Promise.resolve('/Users/me/projekti/Blab'); },
@@ -96,7 +96,7 @@ test('Without a shell to ask, the folder itself is still checked', async ({ page
 });
 
 // The migration: a folder remembered by a version that allowed checkouts. The
-// handle cannot be faked — it only ever comes from the picker — but an
+// handle cannot be faked (it only ever comes from the picker), but an
 // origin-private one is the same type and goes into IndexedDB the same way, so
 // boot() can be walked through the whole path for real.
 const REMEMBER_A_CHECKOUT = `
