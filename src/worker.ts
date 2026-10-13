@@ -1,25 +1,30 @@
 // Whisper runs here so a long talk never freezes the page.
 import {
+  Tensor,
   TextStreamer,
   env,
   pipeline,
   type AutomaticSpeechRecognitionPipeline,
 } from '@huggingface/transformers';
 import { type ModelId, modelById } from './models';
-import { fromChunks } from './timeline';
-import { assembleSpeech, mapToRecording, speechWindows } from './vad';
+import { type Line, fromChunks } from './timeline';
+import { assembleSpeech, mapToRecording, nearestJoin, speechWindows, type Offset } from './vad';
 import { filterTimestampTokens } from './tokens';
 import { engineOutOfMemory, engineWords } from './engine-errors';
+import { looping } from './loops';
+import { type Guess, fromLogits, stretches } from './language';
 
 /**
- * Whisper stays multilingual even though Blab only writes English.
+ * Whisper stays multilingual, and that is what lets Blab write each stretch
+ * of a recording in the language it was spoken in.
  *
  * `whisper-base.en` is the obvious swap; same parameter count, same 73 MB,
  * all of it spent on one language, and it was tried. On five sentences put
  * through both, it tied on three, both got one wrong, and it lost the fifth:
  * "rear delt" came back as "rear dealt" where the multilingual model wrote it
  * correctly. Aggregate benchmarks favour the .en tiers; this vocabulary did
- * not, so the measurement wins over the benchmark.
+ * not, so the measurement wins over the benchmark. An English-only model also
+ * has no language tokens, so it could not say what it hears.
  */
 const CHUNK_S = 30;
 const STRIDE_S = 5;
@@ -193,39 +198,6 @@ class PartialStreamer extends TextStreamer {
   }
 }
 
-/**
- * Above this, a transcript is repetition rather than speech.
- *
- * Real Whisper decides this the same way and re-runs the chunk at a higher
- * temperature when it trips. transformers.js implements none of that; there is
- * no compression_ratio_threshold, no logprob_threshold, no temperature fallback
- * anywhere in the bundle, so Blab cannot re-decode. What it can do is notice,
- * and say so, which is the difference between a file you throw away and a file
- * you do not know to throw away.
- *
- * Ordinary English gzips to about 1.5-2.0 here. The looped recording that
- * prompted this measured 3.15.
- */
-const LOOP_RATIO = 2.4;
-
-/** Gzip via the platform: no dependency, and the same metric Whisper uses. */
-async function looping(text: string): Promise<boolean> {
-  // Short transcripts compress badly for boring reasons; there is no room for
-  // a dictionary to pay for itself, so the ratio means nothing down there.
-  if (text.length < 200) return false;
-  try {
-    const raw = new TextEncoder().encode(text);
-    const gz = new Response(
-      new Blob([raw]).stream().pipeThrough(new CompressionStream('gzip')),
-    );
-    const packed = (await gz.arrayBuffer()).byteLength;
-    return raw.byteLength / packed > LOOP_RATIO;
-  } catch {
-    // A missing CompressionStream must never cost someone their transcript.
-    return false;
-  }
-}
-
 /** Whisper timestamp tokens that leak into decoded text on some paths. */
 const TIME_TOKEN = /<\|[\d.]+\|>/g;
 
@@ -235,7 +207,7 @@ function stripTimestamps(text: string): string {
 }
 
 /** The common transcription settings, shared by the full and live jobs. */
-function settings(streamer: TextStreamer) {
+function settings(streamer: TextStreamer, language: string) {
   return {
     chunk_length_s: CHUNK_S,
     stride_length_s: STRIDE_S,
@@ -245,13 +217,14 @@ function settings(streamer: TextStreamer) {
     // jump the player there.
     return_timestamps: true,
     task: 'transcribe' as const,
-    // Pinned in code rather than chosen in the UI. The picker that used to
-    // set this is gone: the language cannot be detected, so it had to be
-    // named by hand, and naming it wrong did not degrade a transcript; it
-    // destroyed it. Leaving this out is not "detect it" either; transformers
-    // .js has no detection and quietly assumes English, so saying English is
-    // the same behaviour said out loud.
-    language: 'en' as const,
+    // Always named, never left out: transformers.js has no detection and,
+    // left to itself, quietly assumes English. Named wrong, Whisper does as
+    // it is told: English named on Croatian comes back as an English that
+    // invents, and Croatian named on English as a loop. The language picker
+    // that used to set this by hand is gone for that reason; the full job
+    // now asks Whisper itself, per stretch (see planLanguages), and live
+    // captions, a preview, stay English.
+    language,
     // Whisper gets stuck. On a quiet room, or noise that sounds vaguely like
     // speech, it will latch onto a phrase and repeat it hundreds of times,
     // one recording here lost 434 words in a row to "like a city". Forbidding
@@ -288,6 +261,84 @@ function settings(streamer: TextStreamer) {
     temperature: 0,
     streamer,
   };
+}
+
+/** A stretch of the speech signal, in samples, and the language spoken in it. */
+type Piece = { start: number; end: number; language: string };
+
+/** How far a cut between two languages may move to land in a pause, in seconds. */
+const CUT_REACH_S = 10;
+
+/**
+ * What Whisper thinks it hears in one window: the encoder once, then the
+ * decoder's first step after <|startoftranscript|>, read over the language
+ * tokens alone. That is the whole of Whisper's own detect_language, which
+ * transformers.js 3.7.6 leaves as a TODO.
+ */
+async function guessLanguage(
+  asr: AutomaticSpeechRecognitionPipeline,
+  samples: Float32Array,
+): Promise<Guess> {
+  const config = asr.model.generation_config as any;
+  const { input_features } = await (asr.processor as any)(samples);
+  const start = new Tensor('int64', BigInt64Array.from([BigInt(config.decoder_start_token_id)]), [1, 1]);
+  const { logits } = await (asr.model as any)({ input_features, decoder_input_ids: start });
+  const scores = logits.data as Float32Array;
+  return fromLogits(
+    Object.entries(config.lang_to_id as Record<string, number>).map(
+      ([token, tokenId]) => [token.slice(2, -2), scores[tokenId]] as [string, number],
+    ),
+  );
+}
+
+/**
+ * The speech signal cut into stretches, each in the language it was spoken
+ * in: one guess per CHUNK_S of speech, src/language.ts to turn the guesses
+ * into stretches, and every cut moved into the nearest pause so no word is
+ * split between two languages.
+ *
+ * A recording in one language is one piece, and transcribes exactly as it did
+ * before Blab asked. Anything going wrong here leaves the whole signal in
+ * English, which is what Blab always did; asking must never cost a transcript.
+ */
+async function planLanguages(
+  asr: AutomaticSpeechRecognitionPipeline,
+  source: Float32Array,
+  offsets: Offset[],
+  onWindow: (done: number) => void,
+): Promise<Piece[]> {
+  const whole: Piece[] = [{ start: 0, end: source.length, language: 'en' }];
+  const config = asr.model.generation_config as any;
+  if (!config?.is_multilingual || !config.lang_to_id) return whole;
+  const window = CHUNK_S * SAMPLE_RATE;
+  const count = Math.ceil(source.length / window);
+  try {
+    const guesses: Guess[] = [];
+    for (let i = 0; i < count; i++) {
+      // The last window is read flush with the end, so it is full of speech
+      // rather than mostly padding: a few seconds padded out to 30 is where
+      // the guess turned to noise.
+      const at = Math.min(i * window, Math.max(0, source.length - window));
+      guesses.push(await guessLanguage(asr, source.subarray(at, at + window)));
+      onWindow(i + 1);
+    }
+    const cut = (w: number) =>
+      w >= count
+        ? source.length
+        : Math.min(source.length, Math.round(nearestJoin(w * CHUNK_S, offsets, CUT_REACH_S) * SAMPLE_RATE));
+    // Under one window of speech, Whisper still hears 30 seconds: the rest is
+    // silence it was padded with, and the guess is shakier for it.
+    return stretches(guesses, source.length < window)
+      .map((s) => ({ start: s.from === 0 ? 0 : cut(s.from), end: cut(s.to), language: s.language }))
+      .filter((p) => p.end > p.start);
+  } catch (err) {
+    // Except running out of memory: carrying on in English then would write
+    // the invented English this exists to stop, on an engine already short of
+    // room. Failing as out of memory lets the page retry Best on Balanced,
+    // which has the room to ask.
+    if (engineOutOfMemory(err instanceof Error ? err.message : String(err))) throw err;
+    return whole;
+  }
 }
 
 async function runTranscribe(
@@ -336,26 +387,38 @@ async function runTranscribe(
     let noSpeech = false;
 
     if (source.length > 0) {
-      const total = countChunks(source.length);
-      post({ type: 'progress', id, done: 0, total });
-
-      const result = await asr(
-        source,
-        settings(
-          new PartialStreamer(asr.tokenizer as any, id, 0, total, (_id, partialText) => {
-            post({ type: 'partial', id, text: partialText });
-          }),
-        ),
+      // Progress counts the language guesses (one per window) and then the
+      // chunks Whisper transcribes; the second half is only known once the
+      // stretches are, so the total is an estimate until then.
+      const windows = Math.ceil(source.length / (CHUNK_S * SAMPLE_RATE));
+      const guessing = windows + countChunks(source.length);
+      post({ type: 'progress', id, done: 0, total: guessing });
+      const pieces = await planLanguages(asr, source, offsets, (done) =>
+        post({ type: 'progress', id, done, total: guessing }),
       );
+      const total = windows + pieces.reduce((n, p) => n + countChunks(p.end - p.start), 0);
 
-      const parts = Array.isArray(result) ? result : [result];
+      // One streamer for every piece, so the partial text runs on in order.
+      const streamer = new PartialStreamer(asr.tokenizer as any, id, windows, total, (_id, partialText) => {
+        post({ type: 'partial', id, text: partialText });
+      });
+      const parts: { text: string }[] = [];
+      const rawLines: Line[] = [];
+      for (const piece of pieces) {
+        const result = await asr(source.subarray(piece.start, piece.end), settings(streamer, piece.language));
+        const got = Array.isArray(result) ? result : [result];
+        parts.push(...got);
+        // Whisper times a piece from its own start; the lines want the signal's.
+        const shift = Math.round((piece.start / SAMPLE_RATE) * 1000);
+        rawLines.push(...fromChunks(got).map((l) => ({ ...l, at: l.at + shift })));
+      }
+
       text = stripTimestamps(
         parts
           .map((r) => r.text)
           .join(' ')
           .trim(),
       );
-      const rawLines = fromChunks(parts);
       segments =
         offsets.length > 0
           ? rawLines.map((l) => ({
@@ -408,7 +471,7 @@ async function runLive(
   try {
     const repo = modelById(model).repo;
     const asr = await getAsr(repo, modelPath, ortPath);
-    const result = await asr(audio, settings(new TextStreamer(asr.tokenizer as any, { skip_prompt: true })));
+    const result = await asr(audio, settings(new TextStreamer(asr.tokenizer as any, { skip_prompt: true }), 'en'));
     const parts = Array.isArray(result) ? result : [result];
     const text = stripTimestamps(
       parts

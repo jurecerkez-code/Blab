@@ -259,6 +259,23 @@ export function assembleSpeech(
   return { samples, offsets };
 }
 
+/**
+ * The join between two speech windows nearest to `seconds` of the assembled
+ * signal, if one lies within `reach`; otherwise `seconds` as it was. A join
+ * is quiet on both sides (each window carries its own pad), so it is where
+ * the signal can be cut in two without cutting a word.
+ */
+export function nearestJoin(seconds: number, offsets: Offset[], reach: number): number {
+  let best = seconds;
+  let distance = reach;
+  // The first window starts the signal; that is an edge, not a join.
+  for (const o of offsets.slice(1)) {
+    const d = Math.abs(o.concatSec - seconds);
+    if (d <= distance) [best, distance] = [o.concatSec, d];
+  }
+  return best;
+}
+
 /** Whisper time (seconds into the assembled signal) → recording time (ms). */
 export function mapToRecording(seconds: number, offsets: Offset[]): number {
   for (const o of offsets) {
