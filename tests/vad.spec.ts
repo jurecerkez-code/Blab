@@ -6,7 +6,7 @@
 // returns output/stateN, so detection threw before a frame ever ran, and the
 // worker swallowed it. Names in, plan out, no model required.
 import { expect, test } from '@playwright/test';
-import { assembleSpeech, sileroPlan, windowsFromProbs } from '../src/vad';
+import { assembleSpeech, frameInput, nearestJoin, sileroPlan, windowsFromProbs } from '../src/vad';
 
 // Exactly what onnx reports for the model in public/models, read off the
 // installed file rather than assumed.
@@ -25,6 +25,8 @@ test.describe('reading a silero model', () => {
     // stateN, not state. The output map is never keyed by the input names.
     expect(plan.stateOuts).toEqual(['stateN']);
     expect(plan.hidden).toBe(128);
+    // v5 hears each frame with the last 64 samples of the one before.
+    expect(plan.context).toBe(64);
   });
 
   test('the older v4 export is understood too', () => {
@@ -35,6 +37,8 @@ test.describe('reading a silero model', () => {
     expect(plan.stateOuts).toEqual(['hn', 'cn']);
     // Two tensors means the narrow pair.
     expect(plan.hidden).toBe(64);
+    // v4 never took any; feeding it some would be a different model.
+    expect(plan.context).toBe(0);
   });
 
   test('the state is never read back under the name it was fed', () => {
@@ -67,5 +71,80 @@ test.describe('reading a silero model', () => {
     expect(() => sileroPlan(['input', 'sr'], ['output'])).toThrow(/Unexpected silero ONNX/);
     expect(() => sileroPlan(['input', 'state', 'sr'], ['output'])).toThrow(/input, state, sr/);
     expect(() => sileroPlan(['input', 'state', 'sr'], ['output'])).toThrow(/outputs output/);
+  });
+});
+
+test.describe('where to cut the speech between two languages', () => {
+  // Three runs of speech laid end to end: 0-12 s, 12-31 s and 31-50 s of the
+  // signal Whisper hears. The joins at 12 and 31 are quiet: each side carries
+  // its own padding of silence, so cutting there cuts no word in half.
+  const offsets = [
+    { concatSec: 0, realSec: 2, lenSec: 12 },
+    { concatSec: 12, realSec: 20, lenSec: 19 },
+    { concatSec: 31, realSec: 60, lenSec: 19 },
+  ];
+
+  test('a cut moves to the nearest quiet join', () => {
+    expect(nearestJoin(30, offsets, 10)).toBe(31);
+    expect(nearestJoin(15, offsets, 10)).toBe(12);
+  });
+
+  test('of two joins in reach, the closer one wins', () => {
+    // 22 s is 10 from the first join and 9 from the second.
+    expect(nearestJoin(22, offsets, 10)).toBe(31);
+    expect(nearestJoin(20, offsets, 10)).toBe(12);
+  });
+
+  test('a cut with no join in reach stays where it was', () => {
+    expect(nearestJoin(45, offsets, 10)).toBe(45);
+  });
+
+  test('the very start of the signal is not a join', () => {
+    // 1 s from the start, 11 from the first real join.
+    expect(nearestJoin(1, offsets, 10)).toBe(1);
+  });
+
+  test('without the silence detector there is nothing to snap to', () => {
+    expect(nearestJoin(30, [], 10)).toBe(30);
+  });
+});
+
+test.describe('what one frame of silero input holds', () => {
+  // Silero v5 was trained on each 512-sample frame with the last 64 samples
+  // of the frame before it in front, 576 in all; its own OnnxWrapper does
+  // this. Blab fed it 512 bare. Measured on the same file: a clip saying "how
+  // are you doing tonight" peaked at 0.18 and was dropped as silence; with
+  // the context it peaks at 1.00 and keeps 6.1 s of speech.
+  const audio = Float32Array.from({ length: 1200 }, (_, i) => i + 1);
+
+  test('the first frame starts from silence', () => {
+    const x = frameInput(audio, 0, 64);
+    expect(x.length).toBe(576);
+    expect([...x.subarray(0, 64)].every((v) => v === 0)).toBe(true);
+    expect(x[64]).toBe(1);
+    expect(x[575]).toBe(512);
+  });
+
+  test('every later frame starts with the tail of the one before', () => {
+    const x = frameInput(audio, 1, 64);
+    expect(x[0]).toBe(512 - 64 + 1);
+    expect(x[63]).toBe(512);
+    expect(x[64]).toBe(513);
+    expect(x[575]).toBe(1024);
+  });
+
+  test('the last frame is padded with silence, as before', () => {
+    const x = frameInput(audio, 2, 64);
+    expect(x[0]).toBe(1024 - 64 + 1);
+    expect(x[64]).toBe(1025);
+    expect(x[64 + 175]).toBe(1200);
+    expect([...x.subarray(64 + 176)].every((v) => v === 0)).toBe(true);
+  });
+
+  test('a v4 model still gets the bare frame', () => {
+    const x = frameInput(audio, 1, 0);
+    expect(x.length).toBe(512);
+    expect(x[0]).toBe(513);
+    expect(x[511]).toBe(1024);
   });
 });

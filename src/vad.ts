@@ -17,6 +17,18 @@ import * as ort from "onnxruntime-web";
 
 /** Silero's fixed frame size: 32 ms at 16 kHz. */
 const FRAME = 512;
+/**
+ * Samples from the previous frame that silero v5 hears before each new one.
+ *
+ * v5 was trained on 512-sample frames with the last 64 samples of the frame
+ * before in front, 576 in all, and silero's own OnnxWrapper feeds it exactly
+ * that. Blab fed it the 512 alone, and v5 does not say so; it just hears
+ * less speech. Measured on the same file with the same model: a clip saying
+ * "how are you doing tonight" peaked at 0.18 and was thrown away as silence,
+ * and with the context it peaks at 1.00 and keeps 6.1 s of speech. A two
+ * minute voice message lost 9 s of its words the old way.
+ */
+const CONTEXT = 64;
 const SAMPLE_RATE = 16000;
 /** sigmoid(this or higher) starts a speech run. */
 const THRESHOLD = 0.5;
@@ -94,6 +106,7 @@ export function sileroPlan(
   stateIns: string[];
   stateOuts: string[];
   hidden: number;
+  context: number;
 } {
   const isRate = (n: string) => n.toLowerCase().includes("sr");
   const audioName =
@@ -112,7 +125,22 @@ export function sileroPlan(
     );
   }
   // One combined state is v5 and 128 wide; a separate h and c is v4 at 64.
-  return { audioName, srName, stateIns, stateOuts, hidden: stateIns.length === 1 ? 128 : 64 };
+  // Only v5 reads each frame with the tail of the one before (see frameInput).
+  const v5 = stateIns.length === 1;
+  return { audioName, srName, stateIns, stateOuts, hidden: v5 ? 128 : 64, context: v5 ? CONTEXT : 0 };
+}
+
+/**
+ * What silero hears for one frame: `context` samples of the frame before,
+ * then the frame itself. Silence stands in before the first sample and after
+ * the last, the same way the frame alone was padded before. Pure, for tests.
+ */
+export function frameInput(audio: Float32Array, frame: number, context: number): Float32Array {
+  const x = new Float32Array(context + FRAME);
+  const from = frame * FRAME - context;
+  const to = Math.min(audio.length, (frame + 1) * FRAME);
+  x.set(audio.subarray(Math.max(0, from), to), Math.max(0, -from));
+  return x;
 }
 
 /**
@@ -133,7 +161,7 @@ export async function speechWindows(
 ): Promise<SpeechWindow[]> {
   const sess = await vadSession(weights, ortPath);
   const outputs = sess.outputNames;
-  const { audioName, srName, stateIns, stateOuts, hidden: hidden0 } = sileroPlan(
+  const { audioName, srName, stateIns, stateOuts, hidden: hidden0, context } = sileroPlan(
     sess.inputNames,
     outputs,
   );
@@ -145,12 +173,9 @@ export async function speechWindows(
   const probs = new Float32Array(frames);
 
   const runOne = async (frame: number, hiddenSize: number): Promise<number> => {
-    const x = new Float32Array(FRAME);
-    const at = frame * FRAME;
-    const take = Math.min(FRAME, audio.length - at);
-    if (take > 0) x.set(audio.subarray(at, at + take));
+    const x = frameInput(audio, frame, context);
     const feeds: Record<string, ort.Tensor> = {
-      [audioName]: new ort.Tensor("float32", x, [1, FRAME]),
+      [audioName]: new ort.Tensor("float32", x, [1, x.length]),
     };
     stateIns.forEach((name, i) => {
       feeds[name] = new ort.Tensor("float32", state[i], [2, 1, hiddenSize]);
@@ -257,6 +282,23 @@ export function assembleSpeech(
     at += c.end - c.start;
   }
   return { samples, offsets };
+}
+
+/**
+ * The join between two speech windows nearest to `seconds` of the assembled
+ * signal, if one lies within `reach`; otherwise `seconds` as it was. A join
+ * is quiet on both sides (each window carries its own pad), so it is where
+ * the signal can be cut in two without cutting a word.
+ */
+export function nearestJoin(seconds: number, offsets: Offset[], reach: number): number {
+  let best = seconds;
+  let distance = reach;
+  // The first window starts the signal; that is an edge, not a join.
+  for (const o of offsets.slice(1)) {
+    const d = Math.abs(o.concatSec - seconds);
+    if (d <= distance) [best, distance] = [o.concatSec, d];
+  }
+  return best;
 }
 
 /** Whisper time (seconds into the assembled signal) → recording time (ms). */
